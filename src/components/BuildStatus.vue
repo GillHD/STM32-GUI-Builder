@@ -71,6 +71,7 @@ const props = defineProps<{
 }>();
 const emit = defineEmits(['clear-messages']);
 
+// Fix: clearMessages must mutate the messages array in parent
 function clearMessages() {
   emit('clear-messages');
 }

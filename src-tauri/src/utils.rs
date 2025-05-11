@@ -9,6 +9,7 @@ use tauri::{Error, command};
 #[derive(Debug)]
 pub enum LogLevel {
     Debug,
+    Warning,
     Info,
     Error,
 }

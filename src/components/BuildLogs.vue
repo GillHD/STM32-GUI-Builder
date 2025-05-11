@@ -3,7 +3,12 @@
     <h2 class="text-xl font-semibold text-gray-700 border-b pb-2">Логи сборки</h2>
     <div
       ref="logContainerEl"
-      class="bg-gray-900 text-white p-4 rounded-lg h-[400px] overflow-y-auto font-mono text-sm leading-relaxed whitespace-pre-wrap"
+      class="bg-gray-900 text-white p-4 rounded-lg font-mono text-sm leading-relaxed whitespace-pre-wrap"
+      :class="{
+        'overflow-y-auto': logs && logs.length > 0,
+        'overflow-y-hidden': !logs || logs.length === 0
+      }"
+      style="height: 28px * 10; max-height: 280px; min-height: 280px;"
     >
       <p v-if="!logs?.length" class="text-gray-400">Логи отсутствуют</p>
       <RecycleScroller
@@ -11,17 +16,17 @@
         :items="logs"
         :item-size="28"
         key-field="logKey"
-        class="h-[400px] overflow-y-auto"
+        class="h-full"
       >
         <template #default="{ item, index }">
           <div
             :key="`${index}-${item.slice(0, 20)}`"
             class="mb-1"
-            :class="{
-              'text-green-400': item.includes('[INFO]'),
-              'text-red-400': item.includes('[ERROR]'),
-              'text-gray-400': !item.includes('[INFO]') && !item.includes('[ERROR]')
-            }"
+            :class="[
+              item.includes('[INFO]') ? 'text-green-400'
+                : item.includes('[ERROR]') ? 'text-red-400'
+                : 'text-gray-400'
+            ]"
             style="white-space: pre-wrap;"
           >
             {{ item }}
@@ -33,11 +38,11 @@
           v-for="(item, index) in logs"
           :key="`${index}-${item.slice(0, 20)}`"
           class="mb-1"
-          :class="{
-            'text-green-400': item.includes('[INFO]'),
-            'text-red-400': item.includes('[ERROR]'),
-            'text-gray-400': !item.includes('[INFO]') && !item.includes('[ERROR]')
-          }"
+          :class="[
+            item.includes('[INFO]') ? 'text-green-400'
+              : item.includes('[ERROR]') ? 'text-red-400'
+              : 'text-gray-400'
+          ]"
           style="white-space: pre-wrap;"
         >
           {{ item }}

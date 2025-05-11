@@ -82,11 +82,11 @@
           <div v-if="setting.field_type === 'range'" class="mt-2">
             <input
               :id="setting.id"
-              v-model="localSettings[setting.id]"
+              :value="rangeInputs[setting.id] ?? ''"
               type="text"
               class="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
               :placeholder="`Range: ${setting.validation?.min}-${setting.validation?.max}`"
-              @input="validateAndUpdate(setting, $event)"
+              @input="onRangeInput(setting, $event)"
             />
             <p v-if="validationErrors[setting.id]" class="mt-1 text-sm text-red-600">
               {{ validationErrors[setting.id] }}
@@ -173,6 +173,7 @@ const emit = defineEmits(['update:modelValue']);
 const localSettings = ref({ ...props.modelValue.settings });
 const validationErrors = ref<{ [key: string]: string }>({});
 const localBuildConfig = ref({ ...props.modelValue });
+const rangeInputs = ref<{ [key: string]: string }>({});
 
 // Sync with modelValue
 watch(
@@ -181,8 +182,17 @@ watch(
     localBuildConfig.value = { ...newValue };
     localSettings.value = { ...newValue.settings };
     validationErrors.value = {};
+    // Only initialize rangeInputs if they're empty
+    for (const setting of props.buildSettings.build_settings) {
+      if (setting.field_type === 'range' && !rangeInputs.value[setting.id]) {
+        const val = newValue.settings[setting.id];
+        if (typeof val === 'string') {
+          rangeInputs.value[setting.id] = val;
+        }
+      }
+    }
   },
-  { deep: true }
+  { deep: true, immediate: true }
 );
 
 // Sync localSettings with modelValue.settings
@@ -204,6 +214,7 @@ const validateAndUpdate = /* debounce( */ (setting: BuildSettingsConfig['build_s
     return;
   }
   const value = target.value;
+  rangeInputs.value[setting.id] = value; // Сохраняем строку как есть для отображения
   if (setting.validation) {
     if (validateNumericRange(value, setting.validation.min, setting.validation.max)) {
       const parsed = parseNumericRange(value, setting.validation.min, setting.validation.max);
@@ -328,6 +339,31 @@ const buildProject = async () => {
     }
   });
 };
+
+// Обработчик для поля range, сохраняет строку для отображения, а в модель кладёт массив
+function onRangeInput(setting: BuildSettingsConfig['build_settings'][0], event: Event) {
+  const target = event.target as HTMLInputElement;
+  const value = target.value;
+  rangeInputs.value[setting.id] = value; // Always save what user types
+  
+  if (value.trim() === '') {
+    // Clear validation error if field is empty
+    validationErrors.value[setting.id] = '';
+    updateValue(`settings.${setting.id}`, []);
+    return;
+  }
+
+  if (setting.validation) {
+    if (validateNumericRange(value, setting.validation.min, setting.validation.max)) {
+      const parsed = parseNumericRange(value, setting.validation.min, setting.validation.max);
+      updateValue(`settings.${setting.id}`, parsed);
+      validationErrors.value[setting.id] = '';
+    } else {
+      // Don't clear input on validation error
+      validationErrors.value[setting.id] = `Invalid range. Use format like "11, 23-26, 30" within [${setting.validation.min}, ${setting.validation.max}]`;
+    }
+  }
+}
 
 defineExpose({ buildProject });
 </script>

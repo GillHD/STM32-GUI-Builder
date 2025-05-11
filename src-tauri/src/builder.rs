@@ -264,7 +264,6 @@ pub async fn build_project(window: Window, config: BuildConfig) -> Result<BuildR
         Some(config_name) => format!("{}/{}", project_name, config_name),
         None => project_name.clone(),
     };
-    let build_target_quoted = quote_path(&build_target);
     let build_flag = if build_config.clean_build { "-cleanBuild" } else { "-build" };
 
     // Сбор значений настроек
@@ -371,7 +370,6 @@ pub async fn build_project(window: Window, config: BuildConfig) -> Result<BuildR
         for value_opt in values_for_comb {
             for combo in &build_combinations {
                 let mut new_combo = combo.clone();
-                // FIX: borrow value in pattern to avoid move
                 if let Some(ref value) = value_opt {
                     new_combo.push((setting.id.clone(), value.clone()));
                 }
@@ -382,9 +380,9 @@ pub async fn build_project(window: Window, config: BuildConfig) -> Result<BuildR
         // Логируем после каждого шага
         let msg = log_with_timestamp(
             &format!(
-                "After processing '{}', build_combinations count: {}. Example: {:?}",
-                setting.id,
-                build_combinations.len(),
+                "After processing '{}', build_combinations count: {}. Example: {:?}", 
+                setting.id, 
+                build_combinations.len(), 
                 build_combinations.get(0)
             ),
             LogLevel::Debug
@@ -446,6 +444,10 @@ pub async fn build_project(window: Window, config: BuildConfig) -> Result<BuildR
         let log_name = format!("{}_FBOOT.log", name_parts.join("_"));
         let stm32_log_file = combo_dir.join(&log_name);
 
+        // Новый файл для stdout/stderr
+        let txt_log_name = format!("{}_FBOOT.txt", name_parts.join("_"));
+        let txt_log_file = combo_dir.join(&txt_log_name);
+
         // Проверка и удаление существующего .bin
         stages.push(format!("Checking and removing existing .bin file for combination {:?}", combination));
         if bin_dst.exists() {
@@ -477,7 +479,8 @@ pub async fn build_project(window: Window, config: BuildConfig) -> Result<BuildR
         // Динамическая генерация define/undef
         for setting in &settings_config.build_settings {
             let id = &setting.id;
-            let value_opt = combination.iter().find(|(s_id, _)| s_id == id).map(|(_, v)| v);
+            // Clone the value to avoid lifetime issues (fixes previous `value_opt.0` error)
+            let value_opt = combination.iter().find(|(s_id, _)| s_id == id).map(|(_, v)| v.clone());
 
             match setting.field_type.as_str() {
                 "range" => {
@@ -493,9 +496,12 @@ pub async fn build_project(window: Window, config: BuildConfig) -> Result<BuildR
                 "select" | "checkbox_group" => {
                     if let Some(options) = &setting.options {
                         for opt in options {
-                            // Fix: avoid borrow checker issues by extracting value as &str before the loop
-                            let selected_value: Option<&str> = value_opt.map(|v| v.as_str());
-                            let is_selected = selected_value == Some(opt.value.as_str());
+                            let is_selected = if let Some(v) = &value_opt {
+                                v == &opt.value // Direct String comparison
+                            } else {
+                                false
+                            };
+                            
                             if let Some(define) = &opt.define {
                                 if is_selected {
                                     build_config_content.push_str(&format!("#define {}\n", define));
@@ -535,9 +541,9 @@ pub async fn build_project(window: Window, config: BuildConfig) -> Result<BuildR
             "-include".to_string(),
             "Inc/build_config.h".to_string(),
             build_flag.to_string(),
-            build_target.clone(), // <-- remove the borrow, use String
+            build_target.clone(),
             "-data".to_string(),
-            workspace_path.clone(), // <-- remove the borrow, use String
+            workspace_path.clone(),
         ];
         // Добавляем пользовательские аргументы, если они есть
         if let Some(ref custom_args) = build_config.custom_console_args {
@@ -583,72 +589,84 @@ pub async fn build_project(window: Window, config: BuildConfig) -> Result<BuildR
 
         // Обработка stdout
         let stdout = child.stdout.take().expect("Failed to capture stdout");
-        let window_clone = window.clone();
         let (tx, mut rx) = tokio::sync::mpsc::channel::<String>(100);
-        let tx_clone = tx.clone();
-        
+        let tx_stdout = tx.clone();
+        let mut stdout_lines = Vec::new();
         let stdout_task = tokio::spawn(async move {
             use tokio::io::{AsyncBufReadExt, BufReader};
-            let mut reader = BufReader::new(stdout);
-            let mut line = String::new();
-            while let Ok(n) = reader.read_line(&mut line).await {
-                if n == 0 { break; }
-                let msg = log_with_timestamp(&format!("[STDOUT] {}", line.trim()), LogLevel::Info);
-                window_clone.emit("build-log", &msg).ok();
-                tx_clone.send(msg).await.ok();
-                line.clear();
+            let reader = BufReader::new(stdout);
+            let mut lines = reader.lines();
+            while let Ok(line) = lines.next_line().await {
+                if let Some(line) = line {
+                    let log = format!("[STDOUT] {}", line.trim());
+                    // Сохраняем вектор строк, не отправляем в канал
+                    stdout_lines.push(log);
+                } else {
+                    break;
+                }
             }
-            drop(tx_clone); // Close the channel when stdout is done
+            Ok::<Vec<String>, std::io::Error>(stdout_lines)
         });
 
         // Обработка stderr
         let stderr = child.stderr.take().expect("Failed to capture stderr");
-        let window_clone = window.clone();
-        
+        let mut stderr_lines = Vec::new();
         let stderr_task = tokio::spawn(async move {
             use tokio::io::{AsyncBufReadExt, BufReader};
-            let mut reader = BufReader::new(stderr);
-            let mut line = String::new();
-            while let Ok(n) = reader.read_line(&mut line).await {
-                if n == 0 { break; }
-                let msg = log_with_timestamp(&format!("[STDERR] {}", line.trim()), LogLevel::Error);
-                window_clone.emit("build-log", &msg).ok();
-                tx.send(msg).await.ok();
-                line.clear();
+            let reader = BufReader::new(stderr);
+            let mut lines = reader.lines();
+            while let Ok(line) = lines.next_line().await {
+                if let Some(line) = line {
+                    let log = format!("[STDERR] {}", line.trim());
+                    stderr_lines.push(log);
+                } else {
+                    break;
+                }
             }
-            drop(tx); // Close the channel when stderr is done
+            Ok::<Vec<String>, std::io::Error>(stderr_lines)
         });
 
-        // Собираем логи из каналов
-        let log_collection_task = tokio::spawn(async move {
-            let mut collected_logs = Vec::new();
-            while let Some(log) = rx.recv().await {
-                collected_logs.push(log);
-            }
-            collected_logs
-        });
+        // Ожидаем завершения процесса
+        let status = child.wait().await.map_err(|e| {
+            let msg = log_with_timestamp(&format!("Process wait failed: {}", e), LogLevel::Error);
+            logs.push(msg.clone());
+            window.emit("build-log", &msg).ok();
+            tauri::Error::from(anyhow::anyhow!(msg))
+        })?;
 
-        let _ = tokio::try_join!(stdout_task, stderr_task)?;
-        if let Ok(mut new_logs) = log_collection_task.await {
-            logs.append(&mut new_logs);
-        }
-
-        // Добавляем таймаут на ожидание завершения процесса
-        let status = tokio::time::timeout(
-            Duration::from_secs(300), // 5 минут таймаут
-            child.wait()
-        ).await
-        .map_err(|e| {
-            let msg = log_with_timestamp(
-                &format!("Build process timed out after 5 minutes: {}", e),
-                LogLevel::Error
-            );
+        // Дожидаемся завершения задач чтения stdout/stderr
+        let stdout_logs = stdout_task.await.map_err(|e| {
+            let msg = log_with_timestamp(&format!("stdout task failed: {}", e), LogLevel::Error);
+            logs.push(msg.clone());
+            window.emit("build-log", &msg).ok();
+            tauri::Error::from(anyhow::anyhow!(msg))
+        })??;
+        let stderr_logs = stderr_task.await.map_err(|e| {
+            let msg = log_with_timestamp(&format!("stderr task failed: {}", e), LogLevel::Error);
             logs.push(msg.clone());
             window.emit("build-log", &msg).ok();
             tauri::Error::from(anyhow::anyhow!(msg))
         })??;
 
-        // Проверяем статус более детально
+        // Записываем stdout/stderr в txt_log_file
+        if let Ok(mut txt_log_writer) = File::create(&txt_log_file) {
+            for log in &stdout_logs {
+                writeln!(txt_log_writer, "{}", log).ok();
+            }
+            for log in &stderr_logs {
+                writeln!(txt_log_writer, "{}", log).ok();
+            }
+            txt_log_writer.flush().ok();
+        } else {
+            let msg = log_with_timestamp(
+                &format!("Failed to create log file '{}'", txt_log_file.display()),
+                LogLevel::Warning
+            );
+            logs.push(msg.clone());
+            window.emit("build-log", &msg).ok();
+        }
+
+        // Проверяем статус процесса
         let exit_code = status.code().unwrap_or(-1);
         let status_msg = log_with_timestamp(
             &format!("Build process exited with code: {}", exit_code),

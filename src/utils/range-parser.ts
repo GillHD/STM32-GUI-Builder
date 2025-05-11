@@ -47,13 +47,15 @@ export function validateNumericRange(rangeStr: string | null | undefined, min: n
 
   const trimmed = rangeStr.trim();
   // Allow commas, numbers, and ranges (e.g., "11,23-26,30")
-  const validFormat = /^(\d+(-\d+)?)(,\s*\d+(-\d+)?)*$/;
-  if (!validFormat.test(trimmed.replace(/\s*-\s*/g, '-'))) return false;
+  const validFormat = /^(\d+(\s*-\s*\d+)?)(\s*,\s*\d+(\s*-\s*\d+)?)*$/;
+  if (!validFormat.test(trimmed)) return false;
 
   return trimmed.split(',').every(part => {
-    const partTrimmed = part.trim().replace(/\s*-\s*/, '-');
+    const partTrimmed = part.trim().replace(/\s*-\s*/g, '-');
     if (partTrimmed.includes('-')) {
-      const [start, end] = partTrimmed.split('-').map(n => parseInt(n.trim(), 10));
+      const [startStr, endStr] = partTrimmed.split('-');
+      const start = parseInt(startStr, 10);
+      const end = parseInt(endStr, 10);
       return !isNaN(start) && !isNaN(end) && start >= min && end <= max && start <= end;
     }
     const num = parseInt(partTrimmed, 10);

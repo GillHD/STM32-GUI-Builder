@@ -30,6 +30,7 @@
               :messages="buildMessages"
               :current-stdout="currentStdout"
               class="bg-white shadow-sm rounded-lg p-4 sm:p-6"
+              @clear-messages="clearAllMessages"
             />
           </div>
           
@@ -50,7 +51,11 @@
         <div class="bg-white shadow-sm rounded-lg p-4 sm:p-6 xl:h-fit">
           <BuildSettings 
             v-model="buildConfig"
-            :build-settings="buildSettings ?? { build_settings: [] }" 
+            :build-settings="buildSettings ?? { build_settings: [] }"
+            :project-path="settings.projectPath ?? ''"
+            :build-dir="settings.buildDir ?? ''"
+            :workspace-path="settings.workspacePath ?? ''"
+            :cube-ide-exe-path="settings.cubeIdeExePath ?? ''"
           />
         </div>
       </div>
@@ -182,4 +187,9 @@ useLogHandler(buildLogs, logContainer);
 useLocalStorage('buildParams', settings);
 useLocalStorage('buildSettings', settings);
 useLocalStorage('buildConfig', buildConfig);
+
+function clearAllMessages() {
+  buildMessages.value = [];
+  buildLogs.value = [];
+}
 </script>

@@ -11,6 +11,8 @@
           Выбрать директорию проекта
         </button>
         <p v-if="modelValue.projectPath" class="text-xs text-gray-500 truncate">{{ modelValue.projectPath }}</p>
+        <!-- Uncomment after implementing validate_path command -->
+        <!-- <p v-if="modelValue.projectPath && !isValidProjectPath" class="text-xs text-red-500">Invalid project directory</p> -->
       </div>
       <div class="space-y-2">
         <label class="block text-sm font-medium text-gray-700">Папка для билдов</label>
@@ -47,6 +49,29 @@
 </template>
 
 <script setup lang="ts">
-defineProps(['modelValue']);
+import type { Settings } from '../types/index';
+// import { ref } from 'vue';
+// import { invoke } from '@tauri-apps/api/tauri';
+
+defineProps<{
+  modelValue: Settings;
+}>();
 defineEmits(['update:modelValue', 'select-project', 'select-build-dir', 'select-workspace', 'select-ide']);
+
+// В emit('update:modelValue', ...) всегда передавайте объект с projectPath, buildDir, workspacePath, cubeIdeExePath
+// Path validation (requires backend validate_path command)
+// const isValidProjectPath = ref<boolean>(true);
+// const validatePath = async (path: string): Promise<boolean> => {
+//   try {
+//     await invoke('validate_path', { path });
+//     return true;
+//   } catch {
+//     return false;
+//   }
+// };
+// watch(() => props.modelValue.projectPath, async (newPath) => {
+//   if (newPath) {
+//     isValidProjectPath.value = await validatePath(newPath);
+//   }
+// });
 </script>

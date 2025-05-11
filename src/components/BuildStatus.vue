@@ -22,8 +22,17 @@
             d="M4 12a8 8 0 018-8v8H4z"
           ></path>
         </svg>
-        <span class="ml-2 text-sm text-gray-600">{{ currentStdout || 'Выполняется сборка...' }}</span>
+        <span class="ml-2 text-sm text-gray-600">{{ currentStdout || 'Current Build Output...' }}</span>
       </div>
+    </div>
+    <div class="flex justify-end">
+      <button
+        v-if="messages.length"
+        @click="clearMessages"
+        class="text-sm text-blue-600 hover:underline"
+      >
+        Clear Messages
+      </button>
     </div>
     <TransitionGroup
       name="fade"
@@ -53,11 +62,18 @@
 </template>
 
 <script setup lang="ts">
-defineProps<{
-  status: 'idle' | 'building' | 'success' | 'error' | 'cancelled';
-  messages: Array<{ type: 'success' | 'error'; text: string }>;
+import type { BuildStatusType, BuildMessage } from '../types/index';
+
+const props = defineProps<{
+  status: BuildStatusType;
+  messages: BuildMessage[];
   currentStdout: string;
 }>();
+const emit = defineEmits(['clear-messages']);
+
+function clearMessages() {
+  emit('clear-messages');
+}
 </script>
 
 <style scoped>

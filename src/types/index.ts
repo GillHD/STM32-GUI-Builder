@@ -1,15 +1,15 @@
 import { Ref } from 'vue';
 
 export interface BuildConfig {
-  project_path: string;
-  build_dir: string;
-  cube_ide_exe_path: string;
-  workspace_path: string;
-  project_name?: string;
-  config_name?: string;
-  clean_build: boolean;
+  projectPath: string;
+  buildDir: string;
+  cubeIdeExePath: string;
+  workspacePath: string;
+  projectName?: string;
+  configName?: string;
+  cleanBuild: boolean;
   cancelled: boolean;
-  custom_console_args?: string;
+  customConsoleArgs?: string;
   settings: Record<string, any>;
 }
 
@@ -58,11 +58,16 @@ export interface BuildProcessReturn {
 }
 
 export interface LocalBuildConfig {
-  settings: Record<string, string | string[]>;
+  projectPath: string;
+  buildDir: string;
+  workspacePath: string;
+  cubeIdeExePath: string;
+  projectName?: string | null;
+  configName?: string | null;
   cleanBuild: boolean;
-  projectName: string | null;
-  configName: string | null;
-  customConsoleArgs: string | null;
+  customConsoleArgs?: string | null;
+  settings: Record<string, string | string[]>;
+  cancelled?: boolean;
 }
 
 export interface BuildResult {

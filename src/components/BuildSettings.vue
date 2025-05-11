@@ -15,7 +15,12 @@
         </div>
 
         <div class="space-y-2">
-          <label class="block text-sm font-medium text-gray-700">Custom Console Arguments</label>
+          <label class="block text-sm font-medium text-gray-700">
+            Custom Console Arguments
+            <span class="ml-1 text-xs text-gray-500 cursor-help" title="Additional command-line arguments for STM32CubeIDE">
+              (?)
+            </span>
+          </label>
           <input
             type="text"
             v-model="localBuildConfig.customConsoleArgs"
@@ -66,6 +71,7 @@
         <div v-for="setting in buildSettings.build_settings" :key="setting.id" 
              class="p-4 bg-gray-50 rounded-lg border border-gray-100">
           <div class="mb-3">
+            <!-- Исправлено: for/id всегда совпадают -->
             <label :for="setting.id" class="block text-sm font-semibold text-gray-900">
               {{ setting.label }}
             </label>
@@ -133,26 +139,42 @@
         </div>
       </div>
     </div>
+
+    <!-- Reset Button -->
+    <div class="flex justify-end">
+      <button
+        @click="resetSettings"
+        class="py-2 px-4 bg-gray-600 hover:bg-gray-700 text-white rounded-lg transition"
+      >
+        Reset Settings
+      </button>
+    </div>
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, watch } from 'vue';
-import type { LocalBuildConfig, BuildSettingsConfig } from '../types';
+import type { LocalBuildConfig, BuildSettingsConfig, Settings } from '../types/index';
 import { parseNumericRange, validateNumericRange } from '../utils/range-parser';
+import { invoke } from '@tauri-apps/api/core';
+
 
 const props = defineProps<{
   modelValue: LocalBuildConfig;
   buildSettings: BuildSettingsConfig;
+  // Добавьте эти строки:
+  projectPath: string;
+  buildDir: string;
+  workspacePath: string;
+  cubeIdeExePath: string;
 }>();
 const emit = defineEmits(['update:modelValue']);
 
 const localSettings = ref({ ...props.modelValue.settings });
 const validationErrors = ref<{ [key: string]: string }>({});
-
 const localBuildConfig = ref({ ...props.modelValue });
 
-// Update watch to include full modelValue
+// Sync with modelValue
 watch(
   () => props.modelValue,
   (newValue) => {
@@ -174,7 +196,7 @@ watch(
 );
 
 // Validate and update range settings
-const validateAndUpdate = (setting: BuildSettingsConfig['build_settings'][0], event: Event) => {
+const validateAndUpdate = /* debounce( */ (setting: BuildSettingsConfig['build_settings'][0], event: Event) => {
   const target = event.target;
   if (!(target instanceof HTMLInputElement)) {
     console.error(`Invalid event target for setting ${setting.id}:`, target);
@@ -191,7 +213,7 @@ const validateAndUpdate = (setting: BuildSettingsConfig['build_settings'][0], ev
       validationErrors.value[setting.id] = `Invalid range. Use format like "11, 23-26, 30" within [${setting.validation.min}, ${setting.validation.max}]`;
     }
   }
-};
+}/* , 300) */; // Uncomment debounce if using lodash
 
 // Update checkbox group settings
 const updateCheckboxGroup = (setting: BuildSettingsConfig['build_settings'][0], event: Event) => {
@@ -227,6 +249,10 @@ const updateValue = (key: string, value: any) => {
     localSettings.value[settingKey] = value;
     emit('update:modelValue', {
       ...props.modelValue,
+      projectPath: props.projectPath,
+      buildDir: props.buildDir,
+      workspacePath: props.workspacePath,
+      cubeIdeExePath: props.cubeIdeExePath,
       settings: {
         ...props.modelValue.settings,
         [settingKey]: value,
@@ -235,11 +261,73 @@ const updateValue = (key: string, value: any) => {
   } else {
     emit('update:modelValue', {
       ...props.modelValue,
+      projectPath: props.projectPath,
+      buildDir: props.buildDir,
+      workspacePath: props.workspacePath,
+      cubeIdeExePath: props.cubeIdeExePath,
       [key]: value,
     });
   }
 };
+
+// Reset settings to defaults
+const resetSettings = () => {
+  localSettings.value = {};
+  validationErrors.value = {};
+  emit('update:modelValue', {
+    ...props.modelValue,
+    projectPath: props.projectPath,
+    buildDir: props.buildDir,
+    workspacePath: props.workspacePath,
+    cubeIdeExePath: props.cubeIdeExePath,
+    settings: {},
+    cleanBuild: false,
+    customConsoleArgs: null,
+    projectName: null,
+    configName: null
+  });
+};
+
+// Пример вызова сборки (теперь используем props для путей):
+const buildProject = async () => {
+  const buildSettingsKeys = props.buildSettings.build_settings.map(s => s.id);
+  const fullSettings: Record<string, any> = { ...localBuildConfig.value.settings };
+  for (const key of buildSettingsKeys) {
+    const setting = props.buildSettings.build_settings.find(s => s.id === key);
+    if (!(key in fullSettings)) {
+      if (setting?.field_type === 'checkbox_group' || setting?.field_type === 'range') {
+        fullSettings[key] = [];
+      } else {
+        fullSettings[key] = null;
+      }
+    }
+    // Удаляем пустые строки/массивы для необязательных параметров
+    if (
+      (setting?.field_type === 'select' && (!fullSettings[key] || fullSettings[key].trim() === '')) ||
+      ((setting?.field_type === 'checkbox_group' || setting?.field_type === 'range') &&
+        Array.isArray(fullSettings[key]) &&
+        fullSettings[key].every((v: any) => typeof v === 'string' ? v.trim() === '' : false) &&
+        !setting?.min_selected
+      )
+    ) {
+      delete fullSettings[key];
+    }
+  }
+  await invoke('build_project', {
+    config: {
+      projectPath: props.projectPath,
+      buildDir: props.buildDir,
+      workspacePath: props.workspacePath,
+      cubeIdeExePath: props.cubeIdeExePath,
+      projectName: localBuildConfig.value.projectName,
+      configName: localBuildConfig.value.configName,
+      cleanBuild: localBuildConfig.value.cleanBuild,
+      customConsoleArgs: localBuildConfig.value.customConsoleArgs,
+      settings: fullSettings,
+      cancelled: (localBuildConfig.value as any).cancelled ?? false
+    }
+  });
+};
+
+defineExpose({ buildProject });
 </script>
-
-
-

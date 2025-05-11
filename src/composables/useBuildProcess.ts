@@ -14,11 +14,16 @@ export function useBuildProcess(): BuildProcessReturn {
   });
 
   const buildConfig = ref<LocalBuildConfig>({
+    projectPath: '',
+    buildDir: '',
+    workspacePath: '',
+    cubeIdeExePath: '',
     settings: {},
     cleanBuild: false,
     projectName: null,
     configName: null,
-    customConsoleArgs: null
+    customConsoleArgs: null,
+    cancelled: false
   });
 
   const buildStatus = ref<BuildStatusType>('idle');
@@ -46,18 +51,18 @@ export function useBuildProcess(): BuildProcessReturn {
 
     try {
       const config: BuildConfig = {
-        project_path: settings.value.projectPath!,
-        build_dir: settings.value.buildDir!,
-        cube_ide_exe_path: settings.value.cubeIdeExePath!,
-        workspace_path: settings.value.workspacePath!,
-        project_name: settings.value.projectName || undefined,
-        config_name: settings.value.configName || undefined,
-        clean_build: buildConfig.value.cleanBuild,
+        projectPath: settings.value.projectPath!,
+        buildDir: settings.value.buildDir!,
+        cubeIdeExePath: settings.value.cubeIdeExePath!,
+        workspacePath: settings.value.workspacePath!,
+        projectName: settings.value.projectName || undefined,
+        configName: settings.value.configName || undefined,
+        cleanBuild: buildConfig.value.cleanBuild,
         cancelled: false,
-        custom_console_args: buildConfig.value.customConsoleArgs || undefined,
+        customConsoleArgs: buildConfig.value.customConsoleArgs || undefined,
         settings: Object.fromEntries(
           Object.entries(buildConfig.value.settings)
-            .filter(([_, value]) => value !== null) // Filter out null values
+            .filter(([_, value]) => value !== null)
             .map(([key, value]) => [key, value])
         ),
       };

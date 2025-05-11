@@ -1,0 +1,43 @@
+@import "tailwindcss";
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+body {
+  @apply bg-gray-100 font-sans;
+}
+
+.container {
+  @apply mx-auto max-w-2xl p-6;
+}
+
+h1 {
+  @apply text-2xl font-bold mb-4 text-gray-800;
+}
+
+button {
+  @apply bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600 transition;
+}
+
+select {
+  @apply border border-gray-300 rounded px-2 py-1;
+}
+
+.error {
+  @apply text-red-500 mt-2;
+}
+
+.build-settings {
+  @apply p-4 bg-white rounded-lg shadow;
+}
+
+.section-header {
+  @apply text-lg font-semibold text-gray-900 border-b border-gray-200 pb-2 mb-4;
+}
+.section-container {
+  @apply bg-white rounded-lg shadow-sm p-6 border border-gray-100;
+}
+.form-group {
+  @apply space-y-4;
+}

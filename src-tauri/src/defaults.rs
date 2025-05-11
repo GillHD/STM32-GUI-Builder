@@ -1,0 +1,116 @@
+pub const DEFAULT_BUILD_SETTINGS: &str = r#"{
+  "version": "1.0",
+  "build_settings": [
+    {
+      "id": "device_type",
+      "label": "Device Type",
+      "description": "Device type number (4-32). Each number represents a specific hardware variant.",
+      "field_type": "range",
+      "format": "number",
+      "validation": {
+        "min": 4,
+        "max": 32
+      }
+    },
+    {
+      "id": "device_mode",
+      "label": "Device Mode",
+      "description": "Operating mode that determines device behavior and available features",
+      "field_type": "select",
+      "format": "string",
+      "options": [
+        {
+          "label": "MDB Gateway",
+          "value": "MDB_GATEWAY",
+          "define": "DEVICE_MODE_MDB_GATEWAY",
+          "description": "MDB Protocol gateway mode for vending machines"
+        },
+        {
+          "label": "Micromarket",
+          "value": "MICROMARKET",
+          "define": "DEVICE_MODE_MICROMARKET",
+          "description": "Automated retail point of sale mode"
+        },
+        {
+          "label": "Retail",
+          "value": "RETAIL",
+          "define": "DEVICE_MODE_RETAIL",
+          "description": "Standard retail payment terminal mode"
+        },
+        {
+          "label": "Transport Ticket Validator",
+          "value": "TRANSPORT_TICKET_VALIDATOR",
+          "define": "DEVICE_MODE_TRANSPORT_TICKET_VALIDATOR",
+          "description": "Public transport ticket validation mode"
+        },
+        {
+          "label": "AZS",
+          "value": "AZS",
+          "define": "DEVICE_MODE_AZS",
+          "description": "Gas station payment terminal mode"
+        },
+        {
+          "label": "Gashapon",
+          "value": "GASHAPON",
+          "define": "DEVICE_MODE_GASHAPON",
+          "description": "Vending machine mode for capsule toys"
+        },
+        {
+          "label": "VRelay",
+          "value": "VRELAY",
+          "define": "DEVICE_MODE_VRELAY",
+          "description": "Virtual relay control mode"
+        }
+      ]
+    },
+    {
+      "id": "languages",
+      "label": "Languages",
+      "description": "Supported interface languages. At least one language must be selected.",
+      "field_type": "checkbox_group",
+      "format": "string[]",
+      "min_selected": 1,
+      "options": [
+        {
+          "label": "English",
+          "value": "en",
+          "define": "LANG_EN",
+          "description": "English language support"
+        },
+        {
+          "label": "Russian",
+          "value": "ru",
+          "define": "LANG_RU",
+          "description": "Russian language support"
+        },
+        {
+          "label": "Kazakh",
+          "value": "kz",
+          "define": "LANG_KZ",
+          "description": "Kazakh language support"
+        }
+      ]
+    },
+    {
+      "id": "additional_options",
+      "label": "Additional Options",
+      "description": "Optional features and payment systems that can be enabled",
+      "field_type": "checkbox_group",
+      "format": "string[]",
+      "options": [
+        {
+          "label": "BelCard Support",
+          "value": "BelCard",
+          "define": "ENABLE_BELCARD",
+          "description": "Enable support for BelCard payment system"
+        },
+        {
+          "label": "Kaspi QR Support",
+          "value": "KASPI_QR",
+          "define": "ENABLE_KASPI_QR",
+          "description": "Enable support for Kaspi QR payments"
+        }
+      ]
+    }
+  ]
+}"#;

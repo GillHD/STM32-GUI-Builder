@@ -6,15 +6,33 @@
  * @param max Maximum allowed value
  * @returns Array of unique numbers in ascending order
  */
-export function parseNumericRange(rangeStr: string | null | undefined, min: number, max: number): string {
-  if (!rangeStr?.trim()) return '';
-  
-  const trimmed = rangeStr.trim();
-  // Validate and ensure the string is within min/max bounds before returning
-  if (validateNumericRange(trimmed, min, max)) {
-    return trimmed;
+export function parseNumericRange(rangeStr: string | null | undefined, min: number, max: number): number[] {
+  if (!rangeStr?.trim()) return [];
+
+  const types: number[] = [];
+  // Split by commas, trim each part, and filter out empty parts
+  const parts = rangeStr.split(',').map(p => p.trim()).filter(p => p);
+
+  for (const part of parts) {
+    // Normalize range part to handle spaces around hyphen (e.g., "23 - 26" -> "23-26")
+    const normalizedPart = part.replace(/\s*-\s*/, '-');
+
+    if (normalizedPart.includes('-')) {
+      const [start, end] = normalizedPart.split('-').map(n => parseInt(n.trim(), 10));
+      if (!isNaN(start) && !isNaN(end) && start >= min && end <= max && start <= end) {
+        for (let i = start; i <= end; i++) {
+          if (!types.includes(i)) types.push(i);
+        }
+      }
+    } else {
+      const num = parseInt(part, 10);
+      if (!isNaN(num) && num >= min && num <= max && !types.includes(num)) {
+        types.push(num);
+      }
+    }
   }
-  return '';
+
+  return types.sort((a, b) => a - b);
 }
 
 /**
@@ -26,14 +44,14 @@ export function parseNumericRange(rangeStr: string | null | undefined, min: numb
  */
 export function validateNumericRange(rangeStr: string | null | undefined, min: number, max: number): boolean {
   if (!rangeStr?.trim()) return true;
-  
+
   const trimmed = rangeStr.trim();
-  // Проверяем формат без преобразования в массив
-  const validFormat = /^(\d+(\с*-\с*\д+)?)(\с*,\с*\д+(\с*-\с*\д+)?)*$/;
+  // Allow commas, numbers, and ranges (e.g., "11,23-26,30")
+  const validFormat = /^(\d+(\s*-\s*\d+)?)(\s*,\s*\d+(\s*-\s*\d+)?)*$/;
   if (!validFormat.test(trimmed)) return false;
 
   return trimmed.split(',').every(part => {
-    const partTrimmed = part.trim().replace(/\с*-\с*/g, '-');
+    const partTrimmed = part.trim().replace(/\s*-\s*/g, '-');
     if (partTrimmed.includes('-')) {
       const [startStr, endStr] = partTrimmed.split('-');
       const start = parseInt(startStr, 10);

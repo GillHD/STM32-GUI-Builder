@@ -624,7 +624,6 @@ pub async fn build_project(window: Window, config: BuildConfig) -> Result<BuildR
 
         // Обработка stdout
         let stdout = child.stdout.take().expect("Failed to capture stdout");
-        let window_clone = window.clone();
         let stdout_task = tokio::spawn(async move {
             use tokio::io::{AsyncBufReadExt, BufReader};
             let reader = BufReader::new(stdout);
@@ -633,15 +632,14 @@ pub async fn build_project(window: Window, config: BuildConfig) -> Result<BuildR
             while let Ok(Some(line)) = lines.next_line().await {
                 let log = format!("[STDOUT] {}", line.trim());
                 stdout_lines.push(log.clone());
-                // Немедленно отправляем лог в UI
-                let _ = window_clone.emit("build-log", &log);
+                // Не отправляем STDOUT в UI
+                // let _ = window_clone.emit("build-log", &log);
             }
             Ok::<Vec<String>, std::io::Error>(stdout_lines)
         });
 
         // Обработка stderr
         let stderr = child.stderr.take().expect("Failed to capture stderr");
-        let window_clone = window.clone();
         let stderr_task = tokio::spawn(async move {
             use tokio::io::{AsyncBufReadExt, BufReader};
             let reader = BufReader::new(stderr);
@@ -650,8 +648,8 @@ pub async fn build_project(window: Window, config: BuildConfig) -> Result<BuildR
             while let Ok(Some(line)) = lines.next_line().await {
                 let log = format!("[STDERR] {}", line.trim());
                 stderr_lines.push(log.clone());
-                // Немедленно отправляем лог в UI
-                let _ = window_clone.emit("build-log", &log);
+                // Не отправляем STDERR в UI
+                // let _ = window_clone.emit("build-log", &log);
             }
             Ok::<Vec<String>, std::io::Error>(stderr_lines)
         });

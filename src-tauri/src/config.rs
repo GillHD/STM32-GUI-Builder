@@ -50,84 +50,15 @@ pub struct BuildSettingsConfig {
 }
 
 impl BuildSettingsConfig {
-    // pub async fn load_async() -> Result<Self, String> {
-    //     // 1. Пытаемся загрузить из текущего проекта, если путь известен
-    //     if let Some(project_path) = BUILD_CONFIG.lock().await.as_ref().map(|c| &c.project_path) {
-    //         let project_settings = Path::new(project_path).join("build_settings.json");
-    //         if project_settings.exists() {
-    //             if let Ok(content) = fs::read_to_string(&project_settings) {
-    //                 if let Ok(config) = serde_json::from_str(&content) {
-    //                     return Ok(config);
-    //                 }
-    //             }
-    //         }
-    //     }
-
-    //     // 2. Проверяем существование дефолтного файла
-    //     let default_path = Path::new("build_settings.json");
-    //     if !default_path.exists() {
-    //         fs::write(default_path, DEFAULT_BUILD_SETTINGS)
-    //             .map_err(|e| format!("Failed to create default build_settings.json: {}", e))?;
-    //     }
-
-    //     // 3. Читаем и парсим дефолтный файл
-    //     let content = fs::read_to_string(default_path)
-    //         .map_err(|e| format!("Error reading config: {}", e))?;
-
-    //     serde_json::from_str(&content)
-    //         .map_err(|e| format!("Error parsing config: {}", e))
-    // }
-
-    // pub fn load_sync() -> Result<Self, String> {
-    //     // 1. Пытаемся загрузить из текущего проекта, если путь известен
-    //     if let Some(project_path) = BUILD_CONFIG.blocking_lock().as_ref().map(|c| &c.project_path) {
-    //         let project_settings = Path::new(project_path).join("build_settings.json");
-    //         if project_settings.exists() {
-    //             if let Ok(content) = fs::read_to_string(&project_settings) {
-    //                 if let Ok(config) = serde_json::from_str(&content) {
-    //                     return Ok(config);
-    //                 }
-    //             }
-    //         }
-    //     }
-
-    //     // 2. Проверяем существование дефолтного файла
-    //     let default_path = Path::new("build_settings.json");
-    //     if !default_path.exists() {
-    //         fs::write(default_path, DEFAULT_BUILD_SETTINGS)
-    //             .map_err(|e| format!("Failed to create default build_settings.json: {}", e))?;
-    //     }
-
-    //     // 3. Читаем и парсим дефолтный файл
-    //     let content = fs::read_to_string(default_path)
-    //         .map_err(|e| format!("Error reading config: {}", e))?;
-
-    //     serde_json::from_str(&content)
-    //         .map_err(|e| format!("Error parsing config: {}", e))
-    // }
-
     pub fn load() -> Result<Self, String> {
-        // 1. Пытаемся загрузить из текущего проекта, если путь известен
-        if let Some(project_path) = BUILD_CONFIG.blocking_lock().as_ref().map(|c| &c.project_path) {
-            let project_settings = Path::new(project_path).join("build_settings.json");
-            if project_settings.exists() {
-                if let Ok(content) = fs::read_to_string(&project_settings) {
-                    if let Ok(config) = serde_json::from_str(&content) {
-                        return Ok(config);
-                    }
-                }
+        let config_path = Path::new("build_settings.json");
+        if !config_path.exists() {
+            if let Err(e) = fs::write(config_path, DEFAULT_BUILD_SETTINGS) {
+                return Err(format!("Failed to create default build_settings.json: {}", e));
             }
         }
 
-        // 2. Проверяем существование дефолтного файла
-        let default_path = Path::new("build_settings.json");
-        if !default_path.exists() {
-            fs::write(default_path, DEFAULT_BUILD_SETTINGS)
-                .map_err(|e| format!("Failed to create default build_settings.json: {}", e))?;
-        }
-
-        // 3. Читаем и парсим дефолтный файл
-        let content = fs::read_to_string(default_path)
+        let content = fs::read_to_string(config_path)
             .map_err(|e| format!("Error reading config: {}", e))?;
 
         serde_json::from_str(&content)

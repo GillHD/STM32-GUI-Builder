@@ -105,11 +105,11 @@
           <div v-if="setting.field_type === 'range'" class="mt-2">
             <input
               :id="setting.id"
-              :value="rangeInputs[setting.id] ?? ''"
+              v-model="localSettings[setting.id]"
               type="text"
               class="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
               :placeholder="`Range: ${setting.validation?.min}-${setting.validation?.max}`"
-              @input="onRangeInput(setting, $event)"
+              @input="(e) => onRangeInput(setting, e)"
             />
             <p v-if="validationErrors[setting.id]" class="mt-1 text-sm text-red-600">
               {{ validationErrors[setting.id] }}
@@ -194,36 +194,8 @@ const emit = defineEmits(['update:modelValue']);
 const localSettings = ref({ ...props.modelValue.settings });
 const validationErrors = ref<{ [key: string]: string }>({});
 const localBuildConfig = ref({ ...props.modelValue });
-const rangeInputs = ref<{ [key: string]: string }>({});
 const configurations = ref<string[]>([]);
 const projectName = ref<string>('');
-
-// --- Синхронизация rangeInputs с modelValue.settings при монтировании и изменении modelValue ---
-// rangeInputs всегда хранит строку, которую ввёл пользователь, и инициализируется из modelValue.settings
-function syncRangeInputsFromSettings(settings: Record<string, any>) {
-  for (const setting of props.buildSettings.build_settings) {
-    if (setting.field_type === 'range') {
-      const val = settings[setting.id];
-      if (typeof val === 'string') {
-        rangeInputs.value[setting.id] = val;
-      } else {
-        rangeInputs.value[setting.id] = '';
-      }
-    }
-  }
-}
-
-// --- При первом монтировании и при изменении modelValue.settings ---
-onMounted(() => {
-  syncRangeInputsFromSettings(props.modelValue.settings);
-});
-watch(
-  () => props.modelValue.settings,
-  (newSettings) => {
-    syncRangeInputsFromSettings(newSettings);
-  },
-  { deep: true, immediate: true }
-);
 
 // Load configurations when project path changes
 watch(() => props.projectPath, async (newPath) => {
@@ -399,24 +371,18 @@ const buildProject = async () => {
 
 // Обработчик для поля range, сохраняет строку для отображения и в settings
 function onRangeInput(setting: BuildSettingsConfig['build_settings'][0], event: Event) {
-  const target = event.target as HTMLInputElement;
-  const value = target.value;
-  
-  // 1. Сохраняем значение в rangeInputs для отображения
-  rangeInputs.value[setting.id] = value;
+  const value = (event.target as HTMLInputElement).value;
 
-  // 2. Сохраняем то же значение в settings
-  localSettings.value[setting.id] = value;
-
-  // 3. Эмитим в родительский компонент оригинальное значение
-  updateValue(`settings.${setting.id}`, value);
-
-  // 4. Только для UI - проверяем валидность
+  // Проверяем валидность
   if (setting.validation) {
     validationErrors.value[setting.id] = validateNumericRange(value, setting.validation.min, setting.validation.max) 
       ? '' 
       : `Invalid range. Use format like "11, 23-26, 30" within [${setting.validation.min}, ${setting.validation.max}]`;
   }
+
+  // Обновляем значение в localSettings и эмитим изменение
+  localSettings.value[setting.id] = value;
+  updateValue(`settings.${setting.id}`, value);
 }
 
 // Удалить лишние watch
@@ -426,12 +392,6 @@ watch(
   (newValue) => {
     localBuildConfig.value = { ...newValue };
     localSettings.value = { ...newValue.settings };
-    // Восстанавливаем значения range из settings
-    for (const [key, value] of Object.entries(newValue.settings)) {
-      if (props.buildSettings.build_settings.find(s => s.id === key && s.field_type === 'range')) {
-        rangeInputs.value[key] = value as string;
-      }
-    }
   },
   { deep: true, immediate: true }
 );

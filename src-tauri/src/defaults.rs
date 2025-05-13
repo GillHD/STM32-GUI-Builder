@@ -5,6 +5,7 @@ pub const DEFAULT_BUILD_SETTINGS: &str = r#"{
       "id": "device_type",
       "label": "Device Type",
       "value": "devtype",
+      "define": "DEVICE_TYPE",
       "description": "Device type number (4-32). Each number represents a specific hardware variant.",
       "field_type": "range",
       "format": "number",

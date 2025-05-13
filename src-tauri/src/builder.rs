@@ -38,7 +38,7 @@ fn validate_cproject_file(project_path: &Path) -> Result<(), tauri::Error> {
     let cproject_file = project_path.join(".cproject");
     let content = fs::read_to_string(&cproject_file)
         .map_err(|e| tauri::Error::from(anyhow::anyhow!("Ошибка чтения '{}': {}", cproject_file.display(), e)))?;
-    if !content.contains("<cproject") {
+    if (!content.contains("<cproject")) {
         return Err(tauri::Error::from(anyhow::anyhow!("Файл '{}' не является валидным .cproject файлом", cproject_file.display())));
     }
     Ok(())
@@ -269,10 +269,26 @@ pub async fn build_project(window: Window, config: BuildConfig) -> Result<BuildR
     // Сбор значений настроек
     let settings_values = settings_config.build_settings.iter().map(|setting| {
         let values = match setting.field_type.as_str() {
-            "range" => config.settings.get(&setting.id)
-                .and_then(|v| v.as_array())
-                .map(|arr| arr.iter().filter_map(|v| v.as_i64().map(|n| n.to_string())).collect::<Vec<_>>())
-                .unwrap_or_default(),
+            "range" => {
+                // Получаем строку range и парсим её в числа
+                if let Some(value) = config.settings.get(&setting.id) {
+                    if let Some(str_val) = value.as_str() {
+                        // Используем parse_range_string для получения чисел
+                        if let Some(validation) = &setting.validation {
+                            match parse_range_string(str_val, validation.min, validation.max) {
+                                Ok(numbers) => numbers.into_iter().map(|n| n.to_string()).collect(),
+                                Err(_) => Vec::new()
+                            }
+                        } else {
+                            Vec::new()
+                        }
+                    } else {
+                        Vec::new()
+                    }
+                } else {
+                    Vec::new()
+                }
+            },
             "select" => config.settings.get(&setting.id)
                 .and_then(|v| v.as_str().map(|s| vec![s.to_string()]))
                 .unwrap_or_default(),
@@ -517,12 +533,14 @@ pub async fn build_project(window: Window, config: BuildConfig) -> Result<BuildR
                     if let Some(value) = value_opt {
                         if let Some(validation) = &setting.validation {
                             if let Ok(numbers) = parse_range_string(&value, validation.min, validation.max) {
-                                for num in numbers {
-                                    build_config_content.push_str(&format!(
-                                        "#ifndef {}_{}\n#define {}_{} {}\n#endif\n",
-                                        setting.id.to_uppercase(), num,
-                                        setting.id.to_uppercase(), num, num
-                                    ));
+                                // Добавляем основной define с последним значением
+                                if let Some(last_num) = numbers.last() {
+                                    if let Some(define) = &setting.define {
+                                        build_config_content.push_str(&format!(
+                                            "#ifndef {}\n#define {} {}\n#endif\n",
+                                            define, define, last_num
+                                        ));
+                                    }
                                 }
                             }
                         }
@@ -612,8 +630,25 @@ pub async fn build_project(window: Window, config: BuildConfig) -> Result<BuildR
             .stdout(std::process::Stdio::piped())
             .stderr(std::process::Stdio::piped());
 
-        #[cfg(windows)]
+        #[cfg(target_os = "windows")]
         command.creation_flags(0x08000000); // CREATE_NO_WINDOW
+
+        #[cfg(target_os = "macos")]
+        {
+            use std::os::unix::process::CommandExt;
+            command.before_exec(|| {
+                unsafe {
+                    libc::setpgid(0, 0);
+                }
+                Ok(())
+            });
+        }
+
+        #[cfg(target_os = "linux")]
+        {
+            use std::os::unix::process::CommandExt;
+            command.process_group(0);
+        }
 
         let mut child = command.spawn().map_err(|e| {
             let msg = log_with_timestamp(&format!("Failed to start STM32CubeIDE process: {}", e), LogLevel::Error);

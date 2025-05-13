@@ -10,6 +10,9 @@ use lazy_static::lazy_static;
 #[cfg(windows)]
 use std::os::windows::process::CommandExt;
 
+#[cfg(unix)]
+use std::os::unix::process::CommandExt;
+
 #[cfg(windows)]
 const CREATE_NO_WINDOW: u32 = 0x08000000;
 
@@ -96,10 +99,50 @@ pub async fn kill_process_and_children(
         }
     }
 
-    #[cfg(unix)]
+    #[cfg(target_os = "linux")]
     {
         let kill_soft = Command::new("kill")
-            .args(&["-TERM", &pid.to_string()])
+            .arg("-15") // SIGTERM
+            .arg(pid.to_string())
+            .output();
+
+        match kill_soft {
+            Ok(output) if output.status.success() => {
+                let msg = log_with_timestamp(
+                    &format!("Soft termination successful for PID {}", pid),
+                    LogLevel::Info,
+                );
+                logs.push(msg.clone());
+                window.emit("build-log", &msg).ok();
+            }
+            Ok(output) => {
+                let msg = log_with_timestamp(
+                    &format!(
+                        "Soft termination failed for PID {}: {}",
+                        pid,
+                        String::from_utf8_lossy(&output.stderr)
+                    ),
+                    LogLevel::Error,
+                );
+                logs.push(msg.clone());
+                window.emit("build-log", &msg).ok();
+            }
+            Err(e) => {
+                let msg = log_with_timestamp(
+                    &format!("Error during soft termination for PID {}: {}", pid, e),
+                    LogLevel::Error,
+                );
+                logs.push(msg.clone());
+                window.emit("build-log", &msg).ok();
+            }
+        }
+    }
+
+    #[cfg(target_os = "macos")]
+    {
+        let kill_soft = Command::new("kill")
+            .arg("-15") // SIGTERM
+            .arg(pid.to_string())
             .output();
 
         match kill_soft {

@@ -17,6 +17,13 @@ use tokio::time::{self, Duration};
 // #[cfg(windows)]
 // use winapi::um::wincon::FreeConsole;
 
+// Добавляем платформо-специфичные импорты
+#[cfg(unix)]
+use std::os::unix::process::CommandExt;
+
+#[cfg(windows)]
+use std::os::windows::process::CommandExt;
+
 // Вспомогательная функция для форматирования сообщений о настройках
 fn format_setting_message(setting_id: &str, value: &serde_json::Value) -> String {
     format!("Setting '{}' with value '{}'", setting_id, value)
@@ -38,7 +45,7 @@ fn validate_cproject_file(project_path: &Path) -> Result<(), tauri::Error> {
     let cproject_file = project_path.join(".cproject");
     let content = fs::read_to_string(&cproject_file)
         .map_err(|e| tauri::Error::from(anyhow::anyhow!("Ошибка чтения '{}': {}", cproject_file.display(), e)))?;
-    if (!content.contains("<cproject")) {
+    if !content.contains("<cproject") {
         return Err(tauri::Error::from(anyhow::anyhow!("Файл '{}' не является валидным .cproject файлом", cproject_file.display())));
     }
     Ok(())
@@ -630,24 +637,24 @@ pub async fn build_project(window: Window, config: BuildConfig) -> Result<BuildR
             .stdout(std::process::Stdio::piped())
             .stderr(std::process::Stdio::piped());
 
-        #[cfg(target_os = "windows")]
+        // Платформо-специфичные настройки
+        #[cfg(windows)]
         command.creation_flags(0x08000000); // CREATE_NO_WINDOW
 
-        #[cfg(target_os = "macos")]
-        {
-            use std::os::unix::process::CommandExt;
-            command.before_exec(|| {
-                unsafe {
-                    libc::setpgid(0, 0);
-                }
+        #[cfg(all(unix, target_os = "macos"))]
+        unsafe {
+            command.pre_exec(|| {
+                libc::setpgid(0, 0);
                 Ok(())
             });
         }
 
-        #[cfg(target_os = "linux")]
-        {
-            use std::os::unix::process::CommandExt;
-            command.process_group(0);
+        #[cfg(all(unix, target_os = "linux"))]
+        unsafe {
+            command.pre_exec(|| {
+                libc::setpgid(0, 0);
+                Ok(())
+            });
         }
 
         let mut child = command.spawn().map_err(|e| {

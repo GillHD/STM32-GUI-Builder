@@ -36,9 +36,9 @@ pub fn log_with_timestamp(msg: &str, level: LogLevel) -> String {
     }
 }
 
-pub fn quote_path(path: &str) -> String {
-    format!("\"{}\"", path)
-}
+// pub fn quote_path(path: &str) -> String {
+//     format!("\"{}\"", path)
+// }
 
 pub fn get_project_name(project_path: &Path) -> Result<String, Error> {
     let project_file = project_path.join(".project");
@@ -103,4 +103,22 @@ pub fn get_cproject_configurations(project_path: &Path) -> Result<Vec<String>, E
         buf.clear();
     }
     Ok(configs)
+}
+
+#[command]
+pub async fn get_project_configurations(project_path: String) -> Result<Vec<String>, String> {
+    let project_path = Path::new(&project_path);
+    match get_cproject_configurations(project_path) {
+        Ok(configs) => Ok(configs),
+        Err(e) => Err(format!("Failed to get project configurations: {}", e))
+    }
+}
+
+#[command]
+pub async fn get_project_name_from_path(project_path: String) -> Result<String, String> {
+    let project_path = Path::new(&project_path);
+    match get_project_name(project_path) {
+        Ok(name) => Ok(name),
+        Err(e) => Err(format!("Failed to get project name: {}", e))
+    }
 }

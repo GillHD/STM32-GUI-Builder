@@ -17,6 +17,7 @@ export interface BuildSettingsConfig {
   build_settings: Array<{
     id: string;
     label: string;
+    value: string; // Added this field for file naming
     field_type: 'range' | 'select' | 'checkbox_group';
     description?: string;
     format?: string;
@@ -38,6 +39,7 @@ export interface Settings {
   workspacePath: string | null;
   projectName: string | null;
   configName: string | null;
+  externalSettingsPath?: string | null;
 }
 
 export interface BuildMessage {

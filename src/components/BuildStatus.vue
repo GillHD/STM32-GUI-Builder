@@ -1,6 +1,6 @@
 <template>
-  <div v-if="status !== 'idle'" class="space-y-2">
-    <div v-if="status === 'building'" class="flex flex-col items-center justify-center space-y-2">
+  <div v-if="props.status !== 'idle'" class="space-y-2">
+    <div v-if="props.status === 'building'" class="flex flex-col items-center justify-center space-y-2">
       <div class="flex items-center">
         <svg
           class="animate-spin h-5 w-5 text-blue-600"
@@ -22,12 +22,12 @@
             d="M4 12a8 8 0 018-8v8H4z"
           ></path>
         </svg>
-        <span class="ml-2 text-sm text-gray-600">{{ currentStdout || 'Current Build Output...' }}</span>
+        <span class="ml-2 text-sm text-gray-600">{{ props.currentStdout || 'Current Build Output...' }}</span>
       </div>
     </div>
     <div class="flex justify-end">
       <button
-        v-if="messages.length"
+        v-if="props.messages.length"
         @click="clearMessages"
         class="text-sm text-blue-600 hover:underline"
       >
@@ -40,7 +40,7 @@
       class="space-y-2"
     >
       <div
-        v-for="(message, index) in messages"
+        v-for="(message, index) in props.messages"
         :key="index"
         :class="[
           'p-4 rounded-lg text-sm transition-all duration-300 ease-in-out',
@@ -64,14 +64,15 @@
 <script setup lang="ts">
 import type { BuildStatusType, BuildMessage } from '../types/index';
 
+// Need to use props when accessing properties in template
 const props = defineProps<{
   status: BuildStatusType;
   messages: BuildMessage[];
   currentStdout: string;
 }>();
+
 const emit = defineEmits(['clear-messages']);
 
-// Fix: clearMessages must mutate the messages array in parent
 function clearMessages() {
   emit('clear-messages');
 }

@@ -6,6 +6,7 @@
       <div class="form-group">
         <div class="flex items-center space-x-3 p-3 bg-gray-50 rounded-md">
           <input
+            id="clean-build-checkbox"
             type="checkbox"
             v-model="localBuildConfig.cleanBuild"
             class="h-5 w-5 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
@@ -15,13 +16,14 @@
         </div>
 
         <div class="space-y-2">
-          <label class="block text-sm font-medium text-gray-700">
+          <label for="custom-console-args" class="block text-sm font-medium text-gray-700">
             Custom Console Arguments
             <span class="ml-1 text-xs text-gray-500 cursor-help" title="Additional command-line arguments for STM32CubeIDE">
               (?)
             </span>
           </label>
           <input
+            id="custom-console-args"
             type="text"
             v-model="localBuildConfig.customConsoleArgs"
             placeholder="Additional command line arguments"
@@ -38,24 +40,35 @@
       <div class="form-group">
         <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
           <div class="space-y-2">
-            <label class="block text-sm font-medium text-gray-700">Project Name</label>
-            <input
-              type="text"
+            <label for="project-name-select" class="block text-sm font-medium text-gray-700">Project Name</label>
+            <select
+              id="project-name-select"
               v-model="localBuildConfig.projectName"
+              :disabled="!projectPath"
               class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
-              @input="(e: Event) => updateValue('projectName', (e.target as HTMLInputElement).value)"
-            />
+              @change="(e: Event) => updateValue('projectName', (e.target as HTMLSelectElement).value)"
+            >
+              <option value="">Select project...</option>
+              <option v-if="projectName" :value="projectName">
+                {{ projectName }}
+              </option>
+            </select>
           </div>
 
           <div class="space-y-2">
-            <label class="block text-sm font-medium text-gray-700">Build Configuration</label>
-            <input
-              type="text"
+            <label for="build-config-select" class="block text-sm font-medium text-gray-700">Build Configuration</label>
+            <select
+              id="build-config-select"
               v-model="localBuildConfig.configName"
-              placeholder="e.g. Debug, Release"
+              :disabled="!projectPath || !configurations.length"
               class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
-              @input="(e: Event) => updateValue('configName', (e.target as HTMLInputElement).value)"
-            />
+              @change="(e: Event) => updateValue('configName', (e.target as HTMLSelectElement).value)"
+            >
+              <option value="">Select configuration...</option>
+              <option v-for="config in configurations" :key="config" :value="config">
+                {{ config }}
+              </option>
+            </select>
           </div>
         </div>
       </div>
@@ -72,9 +85,19 @@
              class="p-4 bg-gray-50 rounded-lg border border-gray-100">
           <div class="mb-3">
             <!-- Исправлено: for/id всегда совпадают -->
-            <label :for="setting.id" class="block text-sm font-semibold text-gray-900">
+            <label
+              v-if="setting.field_type !== 'checkbox_group'"
+              :for="setting.id"
+              class="block text-sm font-semibold text-gray-900"
+            >
               {{ setting.label }}
             </label>
+            <span
+              v-else
+              class="block text-sm font-semibold text-gray-900"
+            >
+              {{ setting.label }}
+            </span>
             <p class="text-sm text-gray-500">{{ setting.description }}</p>
           </div>
 
@@ -153,16 +176,14 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch } from 'vue';
-import type { LocalBuildConfig, BuildSettingsConfig, Settings } from '../types/index';
-import { parseNumericRange, validateNumericRange } from '../utils/range-parser';
+import { ref, watch, onMounted } from 'vue';
+import type { LocalBuildConfig, BuildSettingsConfig } from '../types/index';
+import { validateNumericRange } from '../utils/range-parser';
 import { invoke } from '@tauri-apps/api/core';
-
 
 const props = defineProps<{
   modelValue: LocalBuildConfig;
   buildSettings: BuildSettingsConfig;
-  // Добавьте эти строки:
   projectPath: string;
   buildDir: string;
   workspacePath: string;
@@ -174,57 +195,93 @@ const localSettings = ref({ ...props.modelValue.settings });
 const validationErrors = ref<{ [key: string]: string }>({});
 const localBuildConfig = ref({ ...props.modelValue });
 const rangeInputs = ref<{ [key: string]: string }>({});
+const configurations = ref<string[]>([]);
+const projectName = ref<string>('');
 
-// Sync with modelValue
-watch(
-  () => props.modelValue,
-  (newValue) => {
-    localBuildConfig.value = { ...newValue };
-    localSettings.value = { ...newValue.settings };
-    validationErrors.value = {};
-    // Only initialize rangeInputs if they're empty
-    for (const setting of props.buildSettings.build_settings) {
-      if (setting.field_type === 'range' && !rangeInputs.value[setting.id]) {
-        const val = newValue.settings[setting.id];
-        if (typeof val === 'string') {
-          rangeInputs.value[setting.id] = val;
-        }
+// --- Синхронизация rangeInputs с modelValue.settings при монтировании и изменении modelValue ---
+// rangeInputs всегда хранит строку, которую ввёл пользователь, и инициализируется из modelValue.settings
+function syncRangeInputsFromSettings(settings: Record<string, any>) {
+  for (const setting of props.buildSettings.build_settings) {
+    if (setting.field_type === 'range') {
+      const val = settings[setting.id];
+      if (typeof val === 'string') {
+        rangeInputs.value[setting.id] = val;
+      } else {
+        rangeInputs.value[setting.id] = '';
       }
     }
+  }
+}
+
+// --- При первом монтировании и при изменении modelValue.settings ---
+onMounted(() => {
+  syncRangeInputsFromSettings(props.modelValue.settings);
+});
+watch(
+  () => props.modelValue.settings,
+  (newSettings) => {
+    syncRangeInputsFromSettings(newSettings);
   },
   { deep: true, immediate: true }
 );
 
-// Sync localSettings with modelValue.settings
-watch(
-  () => props.modelValue.settings,
-  (newSettings) => {
-    localSettings.value = { ...newSettings };
-    validationErrors.value = {};
-  },
-  { deep: true }
-);
-
-// Validate and update range settings
-const validateAndUpdate = /* debounce( */ (setting: BuildSettingsConfig['build_settings'][0], event: Event) => {
-  const target = event.target;
-  if (!(target instanceof HTMLInputElement)) {
-    console.error(`Invalid event target for setting ${setting.id}:`, target);
-    validationErrors.value[setting.id] = 'Invalid input element';
-    return;
+// Load configurations when project path changes
+watch(() => props.projectPath, async (newPath) => {
+  if (newPath) {
+    try {
+      configurations.value = await invoke('get_project_configurations', { 
+        projectPath: newPath 
+      });
+    } catch (e) {
+      console.error('Failed to load configurations:', e);
+      configurations.value = [];
+    }
+  } else {
+    configurations.value = [];
   }
-  const value = target.value;
-  rangeInputs.value[setting.id] = value; // Сохраняем строку как есть для отображения
-  if (setting.validation) {
-    if (validateNumericRange(value, setting.validation.min, setting.validation.max)) {
-      const parsed = parseNumericRange(value, setting.validation.min, setting.validation.max);
-      updateValue(`settings.${setting.id}`, parsed);
-      validationErrors.value[setting.id] = '';
-    } else {
-      validationErrors.value[setting.id] = `Invalid range. Use format like "11, 23-26, 30" within [${setting.validation.min}, ${setting.validation.max}]`;
+});
+
+// Load project name when project path changes
+watch(() => props.projectPath, async (newPath) => {
+  if (newPath) {
+    try {
+      projectName.value = await invoke('get_project_name_from_path', { 
+        projectPath: newPath 
+      });
+    } catch (e) {
+      console.error('Failed to load project name:', e);
+      projectName.value = '';
+    }
+  } else {
+    projectName.value = '';
+  }
+});
+
+// Initialize configurations if project path exists
+onMounted(async () => {
+  if (props.projectPath) {
+    try {
+      configurations.value = await invoke('get_project_configurations', {
+        projectPath: props.projectPath
+      });
+    } catch (e) {
+      console.error('Failed to load initial configurations:', e);
     }
   }
-}/* , 300) */; // Uncomment debounce if using lodash
+});
+
+// Initialize project name if project path exists
+onMounted(async () => {
+  if (props.projectPath) {
+    try {
+      projectName.value = await invoke('get_project_name_from_path', {
+        projectPath: props.projectPath
+      });
+    } catch (e) {
+      console.error('Failed to load initial project name:', e);
+    }
+  }
+});
 
 // Update checkbox group settings
 const updateCheckboxGroup = (setting: BuildSettingsConfig['build_settings'][0], event: Event) => {
@@ -340,30 +397,44 @@ const buildProject = async () => {
   });
 };
 
-// Обработчик для поля range, сохраняет строку для отображения, а в модель кладёт массив
+// Обработчик для поля range, сохраняет строку для отображения и в settings
 function onRangeInput(setting: BuildSettingsConfig['build_settings'][0], event: Event) {
   const target = event.target as HTMLInputElement;
   const value = target.value;
-  rangeInputs.value[setting.id] = value; // Always save what user types
   
-  if (value.trim() === '') {
-    // Clear validation error if field is empty
-    validationErrors.value[setting.id] = '';
-    updateValue(`settings.${setting.id}`, []);
-    return;
-  }
+  // 1. Сохраняем значение в rangeInputs для отображения
+  rangeInputs.value[setting.id] = value;
 
+  // 2. Сохраняем то же значение в settings
+  localSettings.value[setting.id] = value;
+
+  // 3. Эмитим в родительский компонент оригинальное значение
+  updateValue(`settings.${setting.id}`, value);
+
+  // 4. Только для UI - проверяем валидность
   if (setting.validation) {
-    if (validateNumericRange(value, setting.validation.min, setting.validation.max)) {
-      const parsed = parseNumericRange(value, setting.validation.min, setting.validation.max);
-      updateValue(`settings.${setting.id}`, parsed);
-      validationErrors.value[setting.id] = '';
-    } else {
-      // Don't clear input on validation error
-      validationErrors.value[setting.id] = `Invalid range. Use format like "11, 23-26, 30" within [${setting.validation.min}, ${setting.validation.max}]`;
-    }
+    validationErrors.value[setting.id] = validateNumericRange(value, setting.validation.min, setting.validation.max) 
+      ? '' 
+      : `Invalid range. Use format like "11, 23-26, 30" within [${setting.validation.min}, ${setting.validation.max}]`;
   }
 }
+
+// Удалить лишние watch
+// Оставить только один:
+watch(
+  () => props.modelValue,
+  (newValue) => {
+    localBuildConfig.value = { ...newValue };
+    localSettings.value = { ...newValue.settings };
+    // Восстанавливаем значения range из settings
+    for (const [key, value] of Object.entries(newValue.settings)) {
+      if (props.buildSettings.build_settings.find(s => s.id === key && s.field_type === 'range')) {
+        rangeInputs.value[key] = value as string;
+      }
+    }
+  },
+  { deep: true, immediate: true }
+);
 
 defineExpose({ buildProject });
 </script>

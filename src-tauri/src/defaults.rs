@@ -4,6 +4,7 @@ pub const DEFAULT_BUILD_SETTINGS: &str = r#"{
     {
       "id": "device_type",
       "label": "Device Type",
+      "value": "devtype",
       "description": "Device type number (4-32). Each number represents a specific hardware variant.",
       "field_type": "range",
       "format": "number",
@@ -15,6 +16,7 @@ pub const DEFAULT_BUILD_SETTINGS: &str = r#"{
     {
       "id": "device_mode",
       "label": "Device Mode",
+      "value": "mode",
       "description": "Operating mode that determines device behavior and available features",
       "field_type": "select",
       "format": "string",
@@ -66,6 +68,7 @@ pub const DEFAULT_BUILD_SETTINGS: &str = r#"{
     {
       "id": "languages",
       "label": "Languages",
+      "value": "lang",
       "description": "Supported interface languages. At least one language must be selected.",
       "field_type": "checkbox_group",
       "format": "string[]",
@@ -94,6 +97,7 @@ pub const DEFAULT_BUILD_SETTINGS: &str = r#"{
     {
       "id": "additional_options",
       "label": "Additional Options",
+      "value": "opt",
       "description": "Optional features and payment systems that can be enabled",
       "field_type": "checkbox_group",
       "format": "string[]",

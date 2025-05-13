@@ -231,7 +231,7 @@ pub async fn kill_process_and_children(
 
     // Проверка дочерних процессов
     system.refresh_processes();
-    let mut children: Vec<Pid> = system
+    let children: Vec<Pid> = system
         .processes()
         .iter()
         .filter(|(_, p)| p.parent() == Some(Pid::from(pid as usize)))

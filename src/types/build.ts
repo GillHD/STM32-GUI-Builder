@@ -22,6 +22,7 @@ export type BuildFieldType = 'range' | 'select' | 'checkbox_group' | 'text' | 'n
 export interface BuildSettingBase {
   id: string;
   name: string;
+  value: string; // Added this field for file naming
   field_type: BuildFieldType;
   description: string;
   define?: string;

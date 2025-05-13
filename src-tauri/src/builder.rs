@@ -1,11 +1,11 @@
 use crate::{
     models::{BuildConfig, BuildResult},
     process::BUILD_CONFIG,
-    utils::{log_with_timestamp, quote_path, get_project_name, get_cproject_configurations, LogLevel},
-    config::BuildSettingsConfig,
-    defaults::DEFAULT_BUILD_SETTINGS,
+    //utils::{log_with_timestamp, quote_path, get_project_name, get_cproject_configurations, LogLevel},
+    utils::{log_with_timestamp, get_project_name, get_cproject_configurations, LogLevel},
+    config::{BuildSettingsConfig, parse_range_string, load_build_settings_schema}
 };
-use chrono::Local;
+//use chrono::Local;
 use serde_json;
 use std::fs::{self, File};
 use std::io::Write;
@@ -14,8 +14,8 @@ use tauri::{command, Window, Emitter};
 use tokio::process::Command;
 use tokio::time::{self, Duration};
 
-#[cfg(windows)]
-use winapi::um::wincon::FreeConsole;
+// #[cfg(windows)]
+// use winapi::um::wincon::FreeConsole;
 
 // Вспомогательная функция для форматирования сообщений о настройках
 fn format_setting_message(setting_id: &str, value: &serde_json::Value) -> String {
@@ -110,7 +110,7 @@ pub async fn build_project(window: Window, config: BuildConfig) -> Result<BuildR
     }
 
     // Загрузка схемы настроек
-    let _schema = match load_build_settings_schema() {
+    let _schema = match load_build_settings_schema().await {
         Ok(s) => s,
         Err(e) => {
             let msg = log_with_timestamp(&format!("Build settings schema error: {}", e), LogLevel::Error);
@@ -206,8 +206,8 @@ pub async fn build_project(window: Window, config: BuildConfig) -> Result<BuildR
             tauri::Error::from(anyhow::anyhow!(msg))
         })?;
     let log_file_path = output_dir.join("build_log.txt");
-    let stm32_log_filename = format!("stm32_build_{}.txt", Local::now().format("%Y%m%d_%H%M%S"));
-    let stm32_log_file_path = output_dir.join(&stm32_log_filename);
+    //let stm32_log_filename = format!("stm32_build_{}.txt", Local::now().format("%Y%m%d_%H%M%S"));
+    //let stm32_log_file_path = output_dir.join(&stm32_log_filename);
 
     // Проверка директорий
     stages.push("Checking and creating directories".to_string());
@@ -425,9 +425,13 @@ pub async fn build_project(window: Window, config: BuildConfig) -> Result<BuildR
         let mut combo_dir_name = String::new();
         let mut name_parts = vec![project_name.clone()];
         for (setting_id, value) in &combination {
-            combo_dir_name.push_str(&format!("{}_{}_", setting_id, value));
-            name_parts.push(format!("{}-{}", setting_id, value));
+            // Get the setting object to access its 'value' field
+            if let Some(setting) = settings_config.build_settings.iter().find(|s| &s.id == setting_id) {
+                combo_dir_name.push_str(&format!("{}_{}_", setting.value, value));
+                name_parts.push(format!("{}-{}", setting.value, value));
+            }
         }
+        
         let combo_dir = output_dir.join(combo_dir_name.trim_end_matches('_'));
         
         if let Err(e) = fs::create_dir_all(&combo_dir) {
@@ -439,13 +443,39 @@ pub async fn build_project(window: Window, config: BuildConfig) -> Result<BuildR
         }
 
         // Формирование имен файлов
-        let bin_name = format!("{}_FBOOT.bin", name_parts.join("_"));
-        let bin_dst = combo_dir.join(&bin_name);
-        let log_name = format!("{}_FBOOT.log", name_parts.join("_"));
-        let stm32_log_file = combo_dir.join(&log_name);
+        let mut name_parts = Vec::new();
+        
+        // 1. Первые 6 символов имени проекта
+        let short_project_name = if project_name.len() > 6 {
+            project_name[..6].to_string()
+        } else {
+            project_name.clone()
+        };
+        name_parts.push(short_project_name);
 
-        // Новый файл для stdout/stderr
-        let txt_log_name = format!("{}_FBOOT.txt", name_parts.join("_"));
+        // 2. Value от старших блоков + используемые младшие
+        for (setting_id, value) in &combination {
+            if let Some(setting) = settings_config.build_settings.iter().find(|s| &s.id == setting_id) {
+                if !value.is_empty() {
+                    name_parts.push(format!("{}-{}", setting.value, value));
+                }
+            }
+        }
+
+        // 3. Build configuration первые 5 символов
+        let config_name = build_config.config_name.as_deref().unwrap_or("Debug");
+        let short_config = if config_name.len() > 5 {
+            &config_name[..5]
+        } else {
+            config_name
+        };
+        name_parts.push(short_config.to_string());
+
+        let bin_name = format!("{}.bin", name_parts.join("_"));
+        let bin_dst = combo_dir.join(&bin_name);
+        //let log_name = format!("{}.log", name_parts.join("_"));
+        //let stm32_log_file = combo_dir.join(&log_name);
+        let txt_log_name = format!("{}.txt", name_parts.join("_"));
         let txt_log_file = combo_dir.join(&txt_log_name);
 
         // Проверка и удаление существующего .bin
@@ -485,11 +515,16 @@ pub async fn build_project(window: Window, config: BuildConfig) -> Result<BuildR
             match setting.field_type.as_str() {
                 "range" => {
                     if let Some(value) = value_opt {
-                        if let Ok(num) = value.parse::<i32>() {
-                            build_config_content.push_str(&format!(
-                                "#ifndef {}\n#define {} {}\n#endif\n",
-                                setting.id.to_uppercase(), setting.id.to_uppercase(), num
-                            ));
+                        if let Some(validation) = &setting.validation {
+                            if let Ok(numbers) = parse_range_string(&value, validation.min, validation.max) {
+                                for num in numbers {
+                                    build_config_content.push_str(&format!(
+                                        "#ifndef {}_{}\n#define {}_{} {}\n#endif\n",
+                                        setting.id.to_uppercase(), num,
+                                        setting.id.to_uppercase(), num, num
+                                    ));
+                                }
+                            }
                         }
                     }
                 }
@@ -530,8 +565,8 @@ pub async fn build_project(window: Window, config: BuildConfig) -> Result<BuildR
 
         // Запуск STM32CubeIDE
         stages.push(format!("Launching build in STM32CubeIDE for combination {:?}", combination));
-        let workspace_path_quoted = quote_path(&workspace_path);
-        let project_path_quoted = quote_path(&build_config.project_path);
+        //let workspace_path_quoted = quote_path(&workspace_path);
+        //let project_path_quoted = quote_path(&build_config.project_path);
 
         // Формирование параметров командной строки для STM32CubeIDE
         let mut headless_args = vec![
@@ -589,39 +624,34 @@ pub async fn build_project(window: Window, config: BuildConfig) -> Result<BuildR
 
         // Обработка stdout
         let stdout = child.stdout.take().expect("Failed to capture stdout");
-        let (tx, mut rx) = tokio::sync::mpsc::channel::<String>(100);
-        let tx_stdout = tx.clone();
-        let mut stdout_lines = Vec::new();
+        let window_clone = window.clone();
         let stdout_task = tokio::spawn(async move {
             use tokio::io::{AsyncBufReadExt, BufReader};
             let reader = BufReader::new(stdout);
             let mut lines = reader.lines();
-            while let Ok(line) = lines.next_line().await {
-                if let Some(line) = line {
-                    let log = format!("[STDOUT] {}", line.trim());
-                    // Сохраняем вектор строк, не отправляем в канал
-                    stdout_lines.push(log);
-                } else {
-                    break;
-                }
+            let mut stdout_lines = Vec::new();
+            while let Ok(Some(line)) = lines.next_line().await {
+                let log = format!("[STDOUT] {}", line.trim());
+                stdout_lines.push(log.clone());
+                // Немедленно отправляем лог в UI
+                let _ = window_clone.emit("build-log", &log);
             }
             Ok::<Vec<String>, std::io::Error>(stdout_lines)
         });
 
         // Обработка stderr
         let stderr = child.stderr.take().expect("Failed to capture stderr");
-        let mut stderr_lines = Vec::new();
+        let window_clone = window.clone();
         let stderr_task = tokio::spawn(async move {
             use tokio::io::{AsyncBufReadExt, BufReader};
             let reader = BufReader::new(stderr);
             let mut lines = reader.lines();
-            while let Ok(line) = lines.next_line().await {
-                if let Some(line) = line {
-                    let log = format!("[STDERR] {}", line.trim());
-                    stderr_lines.push(log);
-                } else {
-                    break;
-                }
+            let mut stderr_lines = Vec::new();
+            while let Ok(Some(line)) = lines.next_line().await {
+                let log = format!("[STDERR] {}", line.trim());
+                stderr_lines.push(log.clone());
+                // Немедленно отправляем лог в UI
+                let _ = window_clone.emit("build-log", &log);
             }
             Ok::<Vec<String>, std::io::Error>(stderr_lines)
         });
@@ -764,20 +794,4 @@ pub async fn build_project(window: Window, config: BuildConfig) -> Result<BuildR
     window.emit("build-log", &last_result).ok();
 
     Ok(BuildResult { result: last_result, logs, stages, success })
-}
-
-#[command]
-pub fn load_build_settings_schema() -> Result<BuildSettingsConfig, String> {
-    let schema_path = "build_settings.json";
-    
-    if !Path::new(schema_path).exists() {
-        fs::write(schema_path, DEFAULT_BUILD_SETTINGS)
-            .map_err(|e| format!("Error creating settings file: {}", e))?;
-    }
-    
-    let content = fs::read_to_string(schema_path)
-        .map_err(|e| format!("Error reading build settings schema: {}", e))?;
-    
-    serde_json::from_str(&content)
-        .map_err(|e| format!("Error parsing build settings schema: {}. Line: {}, Column: {}", e, e.line(), e.column()))
 }

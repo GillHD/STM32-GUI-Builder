@@ -4,8 +4,8 @@ import './style.css';
 import VueVirtualScroller from 'vue3-virtual-scroller';
 import 'vue3-virtual-scroller/dist/vue3-virtual-scroller.css';
 
-// Импорт плагинов Tauri для глобальной доступности
-import '@tauri-apps/plugin-dialog';
+// Удаляем неправильный импорт
+// import '@tauri-apps/plugin-dialog';
 
 // Отключение контекстного меню в продакшене
 if (import.meta.env.PROD) {

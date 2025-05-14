@@ -1,119 +1,120 @@
 # STM32-GUI-Builder 🚀
 
-**STM32-GUI-Builder** is a cross-platform desktop application designed to streamline the configuration and building of STM32 microcontroller projects using STM32CubeIDE. 🌟 With an intuitive graphical user interface (GUI), it simplifies project setup, build configuration, and execution, making it an essential tool for embedded systems developers working with diverse STM32 hardware and software configurations.
+**STM32-GUI-Builder** is a cross-platform desktop application that streamlines the configuration and building of STM32 microcontroller projects using STM32CubeIDE.  
+With an intuitive graphical interface, it simplifies project setup, build configuration, and execution — making it an essential tool for embedded systems developers.
 
 ---
 
-## ✨ Key Features
+## ✨ Features
 
 - 🛠 **Project Configuration**: Easily set project paths, workspace directories, and STM32CubeIDE executable locations.
-- ⚙️ **Dynamic Build Settings**: Define build parameters (e.g., device types, operating modes, languages, and optional features) via a YAML schema, supporting range inputs, dropdowns, and checkbox groups.
-- 🏗 **Automated Build Process**: Run headless builds with STM32CubeIDE, automatically generating `build_config.h` files for each configuration combination.
-- 📊 **Real-Time Build Monitoring**: Track build status, logs, and stdout/stderr output through a responsive GUI.
-- 🌍 **Cross-Platform**: Built with Tauri for lightweight, native performance on Windows, macOS, and Linux.
-- 🔧 **Extensible Schema**: Customize build settings in `build_settings.yaml` to meet specific project needs.
+- ⚙️ **Dynamic Build Settings**: Define build parameters (device types, modes, languages, and more) via a YAML schema, supporting ranges, dropdowns, and checkbox groups.
+- 🏗 **Automated Build Process**: Run headless builds with STM32CubeIDE, automatically generating `build_config.h` for each configuration.
+- 📊 **Real-Time Build Monitoring**: Track build status and logs through a responsive GUI.
+- 🌍 **Cross-Platform**: Native performance on Windows, macOS, and Linux (powered by Tauri).
+- 🔧 **Extensible Schema**: Customize build settings in `build_settings.yaml` to fit your project needs.
 
 ---
 
 ## 📸 Screenshots
 
-![image](https://github.com/user-attachments/assets/e68d7f42-d053-474c-b005-6d46ec71dcfe)
-
+![STM32-GUI-Builder Screenshot](https://github.com/user-attachments/assets/e68d7f42-d053-474c-b005-6d46ec71dcfe)
 
 ---
 
 ## 🛠 Tech Stack
 
-- **Frontend**: Vue 3 (TypeScript, Composition API), Tailwind CSS for modern, responsive UI. 🎨
-- **Backend**: Rust with Tauri for secure, high-performance native integration. ⚡
-- **Build Integration**: Interfaces with STM32CubeIDE for headless builds, leveraging YAML schemas for dynamic configuration.
+- **Frontend**: Vue 3 (TypeScript, Composition API), Tailwind CSS
+- **Backend**: Rust + Tauri
+- **Build Integration**: STM32CubeIDE (headless), YAML schemas
 - **Dependencies**:
   - Frontend: `@tauri-apps/api`, `@tauri-apps/plugin-dialog`, `vue`
-  - Backend: `serde`, `tokio`, `tauri`
+  - Backend: `serde`, `tokio`, `tauri`, `anyhow`, `quick-xml`, and more
 
 ---
 
 ## 📋 Prerequisites
 
-Before setting up the project, ensure the following are installed:
-
 - **Node.js**: v16 or higher
 - **Rust**: v1.65 or higher
-- **STM32CubeIDE**: Installed and accessible (required for build execution)
-- **npm or yarn**: For managing frontend dependencies
+- **Tauri CLI**:  
+  ```bash
+  cargo install tauri-cli
+  ```
+- **STM32CubeIDE**: Installed and accessible in your system
+- **npm** or **yarn**: For frontend dependencies
 
 ---
 
-## ⚙️ Installation
+## ⚡ Quick Start
 
-1. Clone the repository:
+1. **Clone the repository:**
    ```bash
-   git clone https://github.com/your-username/STM32-GUI-Builder.git
+   git clone https://github.com/GillHD/STM32-GUI-Builder.git
    cd STM32-GUI-Builder
    ```
 
-2. Install frontend dependencies:
+2. **Install frontend dependencies:**
    ```bash
    npm install
+   # or
+   yarn install
    ```
 
-3. Ensure Rust and Tauri CLI are installed:
+3. **Run the application in development mode:**
    ```bash
-   cargo install tauri-cli
+   npm run tauri dev
+   # or
+   yarn tauri dev
    ```
+   > The app will open with hot-reloading enabled.
 
----
-
-## 🚀 Running the Application
-
-- Start the development server:
-  ```bash
-  npm run tauri dev
-  ```
-  This launches the app in development mode with hot-reloading.
-
-- Build a release version:
-  ```bash
-  npm run tauri build
-  ```
-  This generates native binaries in `src-tauri/target/release`.
+4. **Build a release version:**
+   ```bash
+   npm run tauri build
+   # or
+   yarn tauri build
+   ```
+   > Native binaries will be generated in `src-tauri/target/release`.
 
 ---
 
 ## 📖 Usage
 
-1. **Configure Project Settings** ⚙️: In the GUI, set the workspace path, STM32CubeIDE executable path, project path, and build directory.
-2. **Define Build Parameters** 📝: Use the build settings interface to specify device types (range), modes (dropdown), languages, and additional options (checkboxes). Settings are loaded from `build_settings.yaml` or default to the backend schema.
-3. **Execute Builds** 🏗: Trigger builds via the GUI. The app generates `build_config.h` files and runs STM32CubeIDE in headless mode. Monitor progress with real-time logs and status updates.
-4. **Customize Settings** 🔧: Edit `build_settings.yaml` in the project root to define custom build parameters (e.g., new device types or options).
+1. **Configure Project Settings**:  
+   In the GUI, set the workspace path, STM32CubeIDE executable path, project path, and build directory.
+2. **Define Build Parameters**:  
+   Use the build settings interface to specify device types (range), modes (dropdown), languages, and additional options (checkboxes). Settings are loaded from `build_settings.yaml` or the backend schema.
+3. **Execute Builds**:  
+   Trigger builds via the GUI. The app generates `build_config.h` files and runs STM32CubeIDE in headless mode. Monitor progress with real-time logs and status updates.
+4. **Customize Settings**:  
+   Edit `build_settings.yaml` in the project root to define custom build parameters (e.g., new device types or options).
+
+For more details, see the [USAGE.md](./USAGE.md) and [HOW_IT_WORKS.md](./HOW_IT_WORKS.md).
 
 ---
 
-## 🗂 Build Settings Schema
-
-Build settings are defined in `build_settings.yaml` (or the default schema in `defaults.rs`). Below is an example schema:
+## 🗂 Example Build Settings Schema
 
 ```yaml
 version: "1.0"
 
 build_settings:
-  # Range input example
   - id: device_type
     label: "Device Type"
     value: "type"
     define: DEVICE_TYPE
-    description: "Device type number (4-32). Each number represents a specific hardware variant."
+    description: "Device type number (4-32)."
     field_type: range
     format: number
     validation:
       min: 4
       max: 32
 
-  # Dropdown (select) example
   - id: device_mode
     label: "Device Mode"
     value: "mode"
-    description: "Operating mode that determines device behavior and available features."
+    description: "Operating mode."
     field_type: select
     format: string
     options:
@@ -126,11 +127,10 @@ build_settings:
         define: "DEVICE_MODE_ADC_EXT"
         description: "ADC external mode."
 
-  # Checkbox group example
   - id: languages
     label: "Languages"
     value: "lang"
-    description: "Supported interface languages. At least one language must be selected."
+    description: "Supported interface languages."
     field_type: checkbox_group
     format: string[]
     min_selected: 1
@@ -153,8 +153,7 @@ build_settings:
 
 ## 🤝 Contributing
 
-Contributions are welcome! To contribute:
-
+Contributions are welcome!  
 1. Fork the repository.
 2. Create a feature branch:
    ```bash
@@ -170,15 +169,18 @@ Contributions are welcome! To contribute:
    ```
 5. Open a pull request.
 
-Please adhere to the coding style, ensure tests pass, and include relevant documentation.
+Please follow the coding style, ensure tests pass, and include relevant documentation.
 
 ---
 
 ## 🛠 Troubleshooting
 
-- **Settings not displaying** 🚫: Check console logs in browser DevTools and Tauri terminal. Verify `build_settings.yaml` exists and matches the schema.
-- **Build failures** ⚠️: Ensure STM32CubeIDE is correctly installed and accessible. Review logs in the GUI or `build_log.txt`.
-- **Dependency issues** 🧩: Run `npm install` and `cargo build` to resolve missing dependencies.
+- **Settings not displaying**:  
+  Check browser DevTools and Tauri terminal logs. Ensure `build_settings.yaml` exists and matches the schema.
+- **Build failures**:  
+  Ensure STM32CubeIDE is installed and accessible. Review logs in the GUI or `build_log.txt`.
+- **Dependency issues**:  
+  Run `npm install` and `cargo build` to resolve missing dependencies.
 
 For additional help, open an issue with relevant logs and details.
 
@@ -186,11 +188,11 @@ For additional help, open an issue with relevant logs and details.
 
 ## 📜 License
 
-This project is licensed under the [MIT License](LICENSE). 📄
+This project is licensed under the [MIT License](LICENSE).
 
 ---
 
 ## 🙌 Acknowledgments
 
-- Built with [Tauri](https://tauri.app/) and [Vue.js](https://vuejs.org/). 💻
-- Inspired by the needs of STM32 embedded developers. 🌟
+- Built with [Tauri](https://tauri.app/) and [Vue.js](https://vuejs.org/)
+- Inspired by the needs of STM32 embedded developers

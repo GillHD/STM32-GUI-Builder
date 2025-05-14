@@ -1,9 +1,11 @@
 use chrono::Local;
-use quick_xml::Reader;
+use quick_xml::reader::Reader;
 use quick_xml::events::Event;
 use std::fs;
 use std::path::Path;
 use tauri::{Error, command};
+use quick_xml::name::QName;
+
 
 // Log levels
 #[derive(Debug)]
@@ -49,20 +51,18 @@ pub fn get_project_name(project_path: &Path) -> Result<String, Error> {
         .map_err(|e| Error::from(anyhow::anyhow!(e.to_string())))?;
     let mut reader = Reader::from_str(&xml_content);
     reader.trim_text(true);
-    let mut buf = Vec::new();
+
     loop {
-        match reader.read_event(&mut buf) {
-            Ok(Event::Start(ref e)) if e.name() == b"name" => {
-                if let Ok(Event::Text(text)) = reader.read_event(&mut buf) {
-                    return Ok(text.unescape_and_decode(&reader)
-                        .map_err(|e| Error::from(anyhow::anyhow!(e.to_string())))?);
+        match reader.read_event() {
+            Ok(Event::Start(ref e)) if e.name().as_ref() == b"name" => {
+                if let Ok(Event::Text(text)) = reader.read_event() {
+                    return Ok(text.unescape().map_err(|e| Error::from(anyhow::anyhow!(e.to_string())))?.into_owned());
                 }
             }
             Ok(Event::Eof) => break,
             Err(e) => return Err(Error::from(anyhow::anyhow!(e.to_string()))),
             _ => (),
         }
-        buf.clear();
     }
     Err(Error::from(anyhow::anyhow!("Project name not found in .project file")))
 }
@@ -76,31 +76,30 @@ pub fn get_cproject_configurations(project_path: &Path) -> Result<Vec<String>, E
         .map_err(|e| Error::from(anyhow::anyhow!(e.to_string())))?;
     let mut reader = Reader::from_str(&xml_content);
     reader.trim_text(true);
-    let mut buf = Vec::new();
     let mut configs = Vec::new();
     let mut _in_configuration = false;
+
     loop {
-        match reader.read_event(&mut buf) {
-            Ok(Event::Start(ref e)) if e.name() == b"configuration" => {
+        match reader.read_event() {
+            Ok(Event::Start(ref e)) if e.name().as_ref() == b"configuration" => {
                 _in_configuration = true;
                 for attr in e.attributes() {
                     if let Ok(attr) = attr {
-                        if attr.key == b"name" {
-                            if let Ok(value) = attr.unescape_and_decode_value(&reader) {
-                                configs.push(value);
+                        if attr.key.as_ref() == b"name" {
+                            if let Ok(value) = attr.unescape_value() {
+                                configs.push(value.into_owned());
                             }
                         }
                     }
                 }
             }
-            Ok(Event::End(ref e)) if e.name() == b"configuration" => {
+            Ok(Event::End(ref e)) if e.name() == QName(b"configuration") => {
                 _in_configuration = false;
             }
             Ok(Event::Eof) => break,
             Err(e) => return Err(Error::from(anyhow::anyhow!(format!("Error parsing .cproject: {}", e)))),
             _ => (),
         }
-        buf.clear();
     }
     Ok(configs)
 }

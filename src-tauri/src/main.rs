@@ -12,11 +12,6 @@ mod models;
 mod process;
 mod utils;
 
-// use builder::{build_project, load_build_settings_schema};
-// use cancel::cancel_build;
-// use config::{get_build_settings, watch_build_settings};
-// use ld_files::get_ld_files;
-
 fn main() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())

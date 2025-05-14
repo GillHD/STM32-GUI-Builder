@@ -215,26 +215,26 @@ watch(() => props.modelValue.projectPath, async (newPath) => {
   }
 });
 
-// Обновляем externalSettingsPath при изменении в родителе
+// Update externalSettingsPath when changed in parent
 watch(() => props.modelValue.externalSettingsPath, (newPath) => {
   externalSettingsPath.value = newPath || '';
 });
 
-// Исправление: используем open из plugin-dialog для выбора внешнего файла
+// Fix: use open from plugin-dialog to select external file
 async function selectExternalSettings() {
   if (!props.modelValue.projectPath) return;
 
   try {
     const selected = await open({
       multiple: false,
-      directory: false, // ВАЖНО: явно указываем, что нужен файл, а не папка!
+      directory: false, // IMPORTANT: explicitly specify file, not folder!
       filters: [{
         name: 'Build Settings',
-        extensions: ['yaml', 'yml']  // Changed from json to yaml
+        extensions: ['yaml', 'yml']
       }]
     });
 
-    // Для plugin-dialog selected может быть строкой или массивом строк
+    // For plugin-dialog selected can be string or array of strings
     const filePath = Array.isArray(selected) ? selected[0] : selected;
     if (filePath && typeof filePath === 'string') {
       externalSettingsPath.value = filePath;
@@ -248,7 +248,7 @@ async function selectExternalSettings() {
   }
 }
 
-// Кнопка очистки любого пути
+// Clear path button
 function clearPath(key: keyof Settings) {
   emit('update:modelValue', {
     ...props.modelValue,
@@ -258,22 +258,5 @@ function clearPath(key: keyof Settings) {
     externalSettingsPath.value = '';
   }
 }
-
-// Если вы хотите чтобы кнопки выбора директорий и exe работали прямо здесь (без emit):
-// Ниже пример для выбора директории проекта (аналогично для других кнопок):
-
-/*
-async function selectProjectDirectory() {
-  try {
-    const selected = await open({ directory: true, multiple: false });
-    const dirPath = Array.isArray(selected) ? selected[0] : selected;
-    if (dirPath && typeof dirPath === 'string') {
-      emit('update:modelValue', { ...props.modelValue, projectPath: dirPath });
-    }
-  } catch (e) {
-    console.error('Failed to select project directory:', e);
-  }
-}
-*/
 
 </script>

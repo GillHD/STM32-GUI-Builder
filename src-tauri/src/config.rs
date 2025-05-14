@@ -1,18 +1,10 @@
-//use tauri::{command, Emitter};
+
 use tauri::{command};
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::Path;
-// use notify::{Watcher, RecursiveMode, Event, RecommendedWatcher};
-// use std::sync::mpsc::channel;
-// use std::thread;
 use crate::defaults::DEFAULT_BUILD_SETTINGS;  
-// use crate::process::BUILD_CONFIG;
 
-// #[command]
-// pub async fn get_build_settings() -> Result<BuildSettingsConfig, String> {
-//     BuildSettingsConfig::load_async().await
-// }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct BuildSettingOption {
@@ -170,42 +162,3 @@ pub async fn load_build_settings_schema() -> Result<BuildSettingsConfig, String>
     serde_yaml::from_str(&content)
         .map_err(|e| format!("Error parsing build settings schema: {}", e))
 }
-
-// #[tauri::command]
-// pub async fn watch_build_settings(window: tauri::Window) {
-//     let (tx, rx) = channel();
-
-//     thread::spawn(move || {
-//         let mut watcher: RecommendedWatcher = notify::recommended_watcher(move |res| {
-//             if let Ok(Event { .. }) = res {
-//                 tx.send(()).ok();
-//             }
-            //         }).expect("Failed to create watcher");
-
-//         watcher
-//             .watch(Path::new("build_settings.json"), RecursiveMode::NonRecursive)
-//             .expect("Failed to watch build_settings.json");
-
-//         loop {
-//             std::thread::park();
-//         }
-//     });
-
-//     // Use a separate non-blocking channel for async communication
-//     let (atx, mut arx) = tokio::sync::mpsc::channel(100);
-//     //let window_clone = window.clone();
-
-//     // Move rx to a blocking task
-//     tokio::task::spawn_blocking(move || {
-//         while rx.recv().is_ok() {
-//             atx.blocking_send(()).ok();
-//         }
-//     });
-
-//     // // Handle async events
-//     // while arx.recv().await.is_some() {
-//     //     if let Ok(config) = BuildSettingsConfig::load_async().await {
-//     //         let _ = window_clone.emit("build-settings-changed", config);
-//     //     }
-//     // }
-// }

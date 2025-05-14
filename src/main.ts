@@ -4,10 +4,10 @@ import './style.css';
 import VueVirtualScroller from 'vue3-virtual-scroller';
 import 'vue3-virtual-scroller/dist/vue3-virtual-scroller.css';
 
-// Импорт плагинов Tauri для глобальной доступности
+// Import Tauri plugins for global accessibility
 import '@tauri-apps/plugin-dialog';
 
-// Отключение контекстного меню в продакшене
+// Disable context menu in production
 if (import.meta.env.PROD) {
   document.addEventListener('contextmenu', (event) => event.preventDefault());
 }

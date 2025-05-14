@@ -1,7 +1,6 @@
 use crate::{
     models::{BuildConfig, BuildResult},
     process::BUILD_CONFIG,
-    //utils::{log_with_timestamp, quote_path, get_project_name, get_cproject_configurations, LogLevel},
     utils::{log_with_timestamp, get_project_name, get_cproject_configurations, LogLevel},
     config::{BuildSettingsConfig, parse_range_string, load_build_settings_schema}
 };
@@ -14,39 +13,33 @@ use tauri::{command, Window, Emitter};
 use tokio::process::Command;
 use tokio::time::{self, Duration};
 
-// #[cfg(windows)]
-// use winapi::um::wincon::FreeConsole;
-
-// Добавляем платформо-специфичные импорты
+// Add platform-specific imports
 #[cfg(unix)]
 use std::os::unix::process::CommandExt;
 
-#[cfg(windows)]
-use std::os::windows::process::CommandExt;
-
-// Вспомогательная функция для форматирования сообщений о настройках
+// Helper function for formatting setting messages
 fn format_setting_message(setting_id: &str, value: &serde_json::Value) -> String {
     format!("Setting '{}' with value '{}'", setting_id, value)
 }
 
-// Проверка валидности .project файла
+// Validate .project file
 fn validate_project_file(project_path: &Path) -> Result<(), tauri::Error> {
     let project_file = project_path.join(".project");
     let content = fs::read_to_string(&project_file)
-        .map_err(|e| tauri::Error::from(anyhow::anyhow!("Ошибка чтения '{}': {}", project_file.display(), e)))?;
+        .map_err(|e| tauri::Error::from(anyhow::anyhow!("Error reading '{}': {}", project_file.display(), e)))?;
     if !content.contains("<projectDescription>") {
-        return Err(tauri::Error::from(anyhow::anyhow!("Файл '{}' не является валидным .project файлом", project_file.display())));
+        return Err(tauri::Error::from(anyhow::anyhow!("File '{}' is not a valid .project file", project_file.display())));
     }
     Ok(())
 }
 
-// Проверка валидности .cproject файла
+// Validate .cproject file
 fn validate_cproject_file(project_path: &Path) -> Result<(), tauri::Error> {
     let cproject_file = project_path.join(".cproject");
     let content = fs::read_to_string(&cproject_file)
-        .map_err(|e| tauri::Error::from(anyhow::anyhow!("Ошибка чтения '{}': {}", cproject_file.display(), e)))?;
+        .map_err(|e| tauri::Error::from(anyhow::anyhow!("Error reading '{}': {}", cproject_file.display(), e)))?;
     if !content.contains("<cproject") {
-        return Err(tauri::Error::from(anyhow::anyhow!("Файл '{}' не является валидным .cproject файлом", cproject_file.display())));
+        return Err(tauri::Error::from(anyhow::anyhow!("File '{}' is not a valid .cproject file", cproject_file.display())));
     }
     Ok(())
 }
@@ -57,7 +50,7 @@ pub async fn build_project(window: Window, config: BuildConfig) -> Result<BuildR
     let mut stages = Vec::new();
     let mut success = true;
 
-    // Загрузка и валидация конфигурации настроек
+    // Load and validate settings configuration
     let settings_config = match BuildSettingsConfig::load() {
         Ok(cfg) => cfg,
         Err(e) => {
@@ -68,26 +61,26 @@ pub async fn build_project(window: Window, config: BuildConfig) -> Result<BuildR
         }
     };
 
-    // Логируем все settings, которые пришли с фронта
+    // Log all settings from frontend
     let settings_json = serde_json::to_string_pretty(&config.settings).unwrap_or_else(|_| "<failed to serialize settings>".to_string());
     let msg = log_with_timestamp(&format!("Received settings from frontend:\n{}", settings_json), LogLevel::Debug);
     logs.push(msg.clone());
     window.emit("build-log", &msg).ok();
 
-    // Логируем build_settings из схемы
+    // Log build_settings from schema
     let build_settings_json = serde_json::to_string_pretty(&settings_config.build_settings).unwrap_or_else(|_| "<failed to serialize build_settings>".to_string());
     let msg = log_with_timestamp(&format!("Loaded build_settings schema:\n{}", build_settings_json), LogLevel::Debug);
     logs.push(msg.clone());
     window.emit("build-log", &msg).ok();
 
-    // Валидация всех настроек
+    // Validate all settings
     for setting in &settings_config.build_settings {
         if let Some(value) = config.settings.get(&setting.id) {
             let msg = log_with_timestamp(&format!("{}", format_setting_message(&setting.id, value)), LogLevel::Debug);
             logs.push(msg.clone());
             window.emit("build-log", &msg).ok();
 
-            // Явно логируем если массив пустой (для checkbox_group/range)
+            // Explicitly log if array is empty (for checkbox_group/range)
             if (setting.field_type == "checkbox_group" || setting.field_type == "range")
                 && value.is_array() && value.as_array().map(|arr| arr.is_empty()).unwrap_or(false)
             {
@@ -106,7 +99,7 @@ pub async fn build_project(window: Window, config: BuildConfig) -> Result<BuildR
                 return Ok(BuildResult { result: msg, logs, stages, success: false });
             }
         } else {
-            // Явно логируем отсутствие значения для параметра
+            // Explicitly log missing value for parameter
             let warn_msg = log_with_timestamp(
                 &format!("Warning: Setting '{}' is missing in settings object", setting.id),
                 LogLevel::Debug
@@ -116,7 +109,7 @@ pub async fn build_project(window: Window, config: BuildConfig) -> Result<BuildR
         }
     }
 
-    // Загрузка схемы настроек
+    // Load settings schema
     let _schema = match load_build_settings_schema().await {
         Ok(s) => s,
         Err(e) => {
@@ -127,7 +120,7 @@ pub async fn build_project(window: Window, config: BuildConfig) -> Result<BuildR
         }
     };
 
-    // Проверка обязательных путей
+    // Check required paths
     if config.project_path.trim().is_empty() || config.build_dir.trim().is_empty() ||
        config.cube_ide_exe_path.trim().is_empty() || config.workspace_path.trim().is_empty() {
         let msg = log_with_timestamp("One or more required paths are empty in BuildConfig", LogLevel::Error);
@@ -136,7 +129,7 @@ pub async fn build_project(window: Window, config: BuildConfig) -> Result<BuildR
         return Ok(BuildResult { result: msg, logs, stages, success: false });
     }
 
-    // Просто копируем строку, без ok_or_else
+    // Just copy string, without ok_or_else
     let workspace_path = config.workspace_path.clone();
     let workspace_dir = Path::new(&workspace_path).canonicalize()
         .map_err(|e| {
@@ -148,7 +141,7 @@ pub async fn build_project(window: Window, config: BuildConfig) -> Result<BuildR
     logs.push(log_with_timestamp(&format!("Using workspace: {}", workspace_path), LogLevel::Info));
     window.emit("build-log", &logs.last().unwrap()).ok();
 
-    // Проверка существования рабочей директории
+    // Check if working directory exists
     if !workspace_dir.exists() || !workspace_dir.is_dir() {
         let msg = log_with_timestamp(&format!("Error: Workspace '{}' does not exist", workspace_path), LogLevel::Error);
         logs.push(msg.clone());
@@ -156,7 +149,7 @@ pub async fn build_project(window: Window, config: BuildConfig) -> Result<BuildR
         return Ok(BuildResult { result: msg, logs, stages, success: false });
     }
 
-    // Клонирование и обновление конфигурации сборки
+    // Clone and update build configuration
     let mut build_config = config.clone();
     build_config.cancelled = Some(build_config.cancelled.unwrap_or(false));
     {
@@ -166,7 +159,7 @@ pub async fn build_project(window: Window, config: BuildConfig) -> Result<BuildR
         window.emit("build-log", &logs.last().unwrap()).ok();
     }
 
-    // Проверка отмены
+    // Check cancellation
     if build_config.cancelled.unwrap_or(false) {
         let msg = log_with_timestamp("Build was cancelled before starting", LogLevel::Info);
         logs.push(msg.clone());
@@ -174,13 +167,13 @@ pub async fn build_project(window: Window, config: BuildConfig) -> Result<BuildR
         return Ok(BuildResult { result: msg, logs, stages, success: false });
     }
 
-    // Начало процесса сборки
+    // Start build process
     let start_msg = log_with_timestamp("Starting project build", LogLevel::Info);
     stages.push(start_msg.clone());
     logs.push(start_msg.clone());
     window.emit("build-log", &start_msg).ok();
 
-    // Проверка пути к STM32CubeIDE
+    // Check STM32CubeIDE path
     stages.push("Validating STM32CubeIDE EXE path".to_string());
     let cube_ide_exe = Path::new(&build_config.cube_ide_exe_path).canonicalize()
         .map_err(|e| {
@@ -196,7 +189,7 @@ pub async fn build_project(window: Window, config: BuildConfig) -> Result<BuildR
         return Ok(BuildResult { result: msg, logs, stages, success: false });
     }
 
-    // Настройка путей
+    // Setup paths
     let project_path = Path::new(&build_config.project_path).canonicalize()
         .map_err(|e| {
             let msg = log_with_timestamp(&format!("Invalid project path '{}': {}", build_config.project_path, e), LogLevel::Error);
@@ -213,10 +206,8 @@ pub async fn build_project(window: Window, config: BuildConfig) -> Result<BuildR
             tauri::Error::from(anyhow::anyhow!(msg))
         })?;
     let log_file_path = output_dir.join("build_log.txt");
-    //let stm32_log_filename = format!("stm32_build_{}.txt", Local::now().format("%Y%m%d_%H%M%S"));
-    //let stm32_log_file_path = output_dir.join(&stm32_log_filename);
 
-    // Проверка директорий
+    // Check directories
     stages.push("Checking and creating directories".to_string());
     if !project_path.exists() {
         let msg = log_with_timestamp(&format!("Error: Project directory '{}' not found", build_config.project_path), LogLevel::Error);
@@ -231,12 +222,12 @@ pub async fn build_project(window: Window, config: BuildConfig) -> Result<BuildR
         return Ok(BuildResult { result: msg, logs, stages, success: false });
     }
 
-    // Проверка проектных файлов
+    // Check project files
     stages.push("Checking project files".to_string());
     validate_project_file(&project_path)?;
     validate_cproject_file(&project_path)?;
 
-    // Проверка конфигураций .cproject
+    // Check .cproject configurations
     let configs = get_cproject_configurations(&project_path)
         .map_err(|e| {
             let msg = log_with_timestamp(&format!("Error reading .cproject: {}", e), LogLevel::Error);
@@ -252,7 +243,7 @@ pub async fn build_project(window: Window, config: BuildConfig) -> Result<BuildR
         return Ok(BuildResult { result: msg, logs, stages, success: false });
     }
 
-    // Получение имени проекта
+    // Get project name
     stages.push("Extracting project name".to_string());
     let project_name = match build_config.project_name {
         Some(name) => name,
@@ -265,7 +256,7 @@ pub async fn build_project(window: Window, config: BuildConfig) -> Result<BuildR
             })?,
     };
 
-    // Формирование параметра сборки
+    // Form build parameter
     stages.push("Forming build parameter".to_string());
     let build_target = match &build_config.config_name {
         Some(config_name) => format!("{}/{}", project_name, config_name),
@@ -273,14 +264,14 @@ pub async fn build_project(window: Window, config: BuildConfig) -> Result<BuildR
     };
     let build_flag = if build_config.clean_build { "-cleanBuild" } else { "-build" };
 
-    // Сбор значений настроек
+    // Collect settings values
     let settings_values = settings_config.build_settings.iter().map(|setting| {
         let values = match setting.field_type.as_str() {
             "range" => {
-                // Получаем строку range и парсим её в числа
+                // Get range string and parse it into numbers
                 if let Some(value) = config.settings.get(&setting.id) {
                     if let Some(str_val) = value.as_str() {
-                        // Используем parse_range_string для получения чисел
+                        // Use parse_range_string to get numbers
                         if let Some(validation) = &setting.validation {
                             match parse_range_string(str_val, validation.min, validation.max) {
                                 Ok(numbers) => numbers.into_iter().map(|n| n.to_string()).collect(),
@@ -308,7 +299,7 @@ pub async fn build_project(window: Window, config: BuildConfig) -> Result<BuildR
         (setting, values)
     }).collect::<Vec<_>>();
 
-    // Подробно логируем settings_values
+    // Log settings_values in detail
     let settings_values_log = settings_values.iter()
         .map(|(setting, values)| format!("{}: {:?}", setting.id, values))
         .collect::<Vec<_>>()
@@ -320,7 +311,7 @@ pub async fn build_project(window: Window, config: BuildConfig) -> Result<BuildR
     logs.push(msg.clone());
     window.emit("build-log", &msg).ok();
 
-    // Проверка: если хотя бы для одного ОБЯЗАТЕЛЬНОГО параметра нет значений — ошибка
+    // Check: if at least one REQUIRED parameter has no values — error
     let missing_required: Vec<String> = settings_config.build_settings.iter()
         .filter_map(|setting| {
             let value = config.settings.get(&setting.id);
@@ -328,7 +319,7 @@ pub async fn build_project(window: Window, config: BuildConfig) -> Result<BuildR
                 "range" | "checkbox_group" => value
                     .and_then(|v| v.as_array())
                     .map(|arr| arr.iter().filter(|v| {
-                        // Игнорируем пустые строки в массиве
+                        // Ignore empty strings in array
                         if let Some(s) = v.as_str() {
                             !s.trim().is_empty()
                         } else if v.is_number() {
@@ -344,7 +335,7 @@ pub async fn build_project(window: Window, config: BuildConfig) -> Result<BuildR
                     .unwrap_or(0),
                 _ => 1,
             };
-            // Только если параметр обязательный (min_selected > 0 или для select всегда 1)
+            // Only if parameter is required (min_selected > 0 or for select always 1)
             let min_required: usize = if setting.field_type == "select" {
                 1
             } else {
@@ -379,11 +370,11 @@ pub async fn build_project(window: Window, config: BuildConfig) -> Result<BuildR
         return Ok(BuildResult { result: msg, logs, stages, success: false });
     }
 
-    // Создание комбинаций сборки (подробное логирование)
+    // Create combinations for build (detailed logging)
     let mut build_combinations = vec![vec![]];
     for (setting, values) in &settings_values {
         let mut new_combinations = vec![];
-        // Если параметр необязательный и массив пустой — используем [None] для декартова произведения
+        // If parameter is optional and array is empty — use [None] for Cartesian product
         let is_optional = setting.min_selected.unwrap_or(0) == 0;
         let values_for_comb = if values.is_empty() && is_optional {
             vec![None]
@@ -400,7 +391,7 @@ pub async fn build_project(window: Window, config: BuildConfig) -> Result<BuildR
             }
         }
         build_combinations = new_combinations;
-        // Логируем после каждого шага
+        // Log after each step
         let msg = log_with_timestamp(
             &format!(
                 "After processing '{}', build_combinations count: {}. Example: {:?}", 
@@ -414,7 +405,7 @@ pub async fn build_project(window: Window, config: BuildConfig) -> Result<BuildR
         window.emit("build-log", &msg).ok();
     }
 
-    // Если build_combinations пустой, логируем причину
+    // If build_combinations is empty, log reason
     if build_combinations.is_empty() {
         let msg = log_with_timestamp(
             "No build combinations generated. This usually means at least one build parameter has no values. Check settings_values and build_settings.",
@@ -427,10 +418,10 @@ pub async fn build_project(window: Window, config: BuildConfig) -> Result<BuildR
 
     let mut any_build_executed = false;
 
-    // Сборка для каждой комбинации
+    // Build for each combination
     for combination in build_combinations {
         any_build_executed = true;
-        // Проверка отмены
+        // Check cancellation
         {
             let config_guard = BUILD_CONFIG.lock().await;
             if let Some(conf) = &*config_guard {
@@ -444,7 +435,7 @@ pub async fn build_project(window: Window, config: BuildConfig) -> Result<BuildR
             }
         }
 
-        // Формирование директории комбинации
+        // Create combination directory
         let mut combo_dir_name = String::new();
         let mut name_parts = vec![project_name.clone()];
         for (setting_id, value) in &combination {
@@ -465,10 +456,10 @@ pub async fn build_project(window: Window, config: BuildConfig) -> Result<BuildR
             return Ok(BuildResult { result: msg, logs, stages, success });
         }
 
-        // Формирование имен файлов
+        // Create file names
         let mut name_parts = Vec::new();
         
-        // 1. Первые 6 символов имени проекта
+        // 1. First 6 characters of project name
         let short_project_name = if project_name.len() > 6 {
             project_name[..6].to_string()
         } else {
@@ -476,7 +467,7 @@ pub async fn build_project(window: Window, config: BuildConfig) -> Result<BuildR
         };
         name_parts.push(short_project_name);
 
-        // 2. Value от старших блоков + используемые младшие
+        // 2. Value from higher blocks + used lower ones
         for (setting_id, value) in &combination {
             if let Some(setting) = settings_config.build_settings.iter().find(|s| &s.id == setting_id) {
                 if !value.is_empty() {
@@ -485,7 +476,7 @@ pub async fn build_project(window: Window, config: BuildConfig) -> Result<BuildR
             }
         }
 
-        // 3. Build configuration первые 5 символов
+        // 3. Build configuration first 5 symbols
         let config_name = build_config.config_name.as_deref().unwrap_or("Debug");
         let short_config = if config_name.len() > 5 {
             &config_name[..5]
@@ -496,12 +487,10 @@ pub async fn build_project(window: Window, config: BuildConfig) -> Result<BuildR
 
         let bin_name = format!("{}.bin", name_parts.join("_"));
         let bin_dst = combo_dir.join(&bin_name);
-        //let log_name = format!("{}.log", name_parts.join("_"));
-        //let stm32_log_file = combo_dir.join(&log_name);
         let txt_log_name = format!("{}.txt", name_parts.join("_"));
         let txt_log_file = combo_dir.join(&txt_log_name);
 
-        // Проверка и удаление существующего .bin
+        // Find and delete .bin
         stages.push(format!("Checking and removing existing .bin file for combination {:?}", combination));
         if bin_dst.exists() {
             if let Err(e) = fs::remove_file(&bin_dst) {
@@ -513,12 +502,12 @@ pub async fn build_project(window: Window, config: BuildConfig) -> Result<BuildR
             }
         }
 
-        // Генерация build_config.h
+        // Generate file build_config.h
         stages.push(format!("Generating build_config.h for combination {:?}", combination));
         let mut build_config_content = String::new();
         build_config_content.push_str("#ifndef BUILD_CONFIG_H_\n#define BUILD_CONFIG_H_\n\n");
 
-        // Создание директории Inc
+        // Create Inc folder
         if let Some(parent) = build_config_file.parent() {
             if let Err(e) = fs::create_dir_all(parent) {
                 let msg = log_with_timestamp(&format!("Error creating directory '{}': {}", parent.display(), e), LogLevel::Error);
@@ -529,7 +518,7 @@ pub async fn build_project(window: Window, config: BuildConfig) -> Result<BuildR
             }
         }
 
-        // Динамическая генерация define/undef
+        // Dynamic generation define/undef
         for setting in &settings_config.build_settings {
             let id = &setting.id;
             // Clone the value to avoid lifetime issues (fixes previous `value_opt.0` error)
@@ -540,7 +529,7 @@ pub async fn build_project(window: Window, config: BuildConfig) -> Result<BuildR
                     if let Some(value) = value_opt {
                         if let Some(validation) = &setting.validation {
                             if let Ok(numbers) = parse_range_string(&value, validation.min, validation.max) {
-                                // Добавляем основной define с последним значением
+                                // Add main define with last value
                                 if let Some(last_num) = numbers.last() {
                                     if let Some(define) = &setting.define {
                                         build_config_content.push_str(&format!(
@@ -579,7 +568,7 @@ pub async fn build_project(window: Window, config: BuildConfig) -> Result<BuildR
         build_config_content.push_str("#undef DEBUG_SET\n");
         build_config_content.push_str("\n#endif // BUILD_CONFIG_H_\n");
 
-        // Запись build_config.h
+        // Write build_config.h
         if let Err(e) = File::create(&build_config_file).and_then(|mut f| f.write_all(build_config_content.as_bytes())) {
             let msg = log_with_timestamp(&format!("Error writing '{}': {}", build_config_file.display(), e), LogLevel::Error);
             logs.push(msg.clone());
@@ -588,12 +577,11 @@ pub async fn build_project(window: Window, config: BuildConfig) -> Result<BuildR
             return Ok(BuildResult { result: msg, logs, stages, success });
         }
 
-        // Запуск STM32CubeIDE
+        // Run STM32CubeIDE
         stages.push(format!("Launching build in STM32CubeIDE for combination {:?}", combination));
-        //let workspace_path_quoted = quote_path(&workspace_path);
-        //let project_path_quoted = quote_path(&build_config.project_path);
 
-        // Формирование параметров командной строки для STM32CubeIDE
+
+        // Create parameters for STM32CubeIDE
         let mut headless_args = vec![
             "-nosplash".to_string(),
             "-application".to_string(),
@@ -605,12 +593,12 @@ pub async fn build_project(window: Window, config: BuildConfig) -> Result<BuildR
             "-data".to_string(),
             workspace_path.clone(),
         ];
-        // Добавляем пользовательские аргументы, если они есть
+        // Add custom arguments if they exist
         if let Some(ref custom_args) = build_config.custom_console_args {
             headless_args.extend(custom_args.split_whitespace().map(|s| s.to_string()));
         }
 
-        // Добавляем логирование команды (выводим строкой, а не массивом)
+        // Add command logging (output as string, not array)
         let msg = log_with_timestamp(
             &format!(
                 "Executing command: {} {}",
@@ -618,7 +606,7 @@ pub async fn build_project(window: Window, config: BuildConfig) -> Result<BuildR
                 headless_args
                     .iter()
                     .map(|s| {
-                        // Добавляем кавычки только если есть пробелы
+                        // Add quotes only if there are spaces
                         if s.contains(' ') { format!("\"{}\"", s) } else { s.clone() }
                     })
                     .collect::<Vec<_>>()
@@ -637,7 +625,7 @@ pub async fn build_project(window: Window, config: BuildConfig) -> Result<BuildR
             .stdout(std::process::Stdio::piped())
             .stderr(std::process::Stdio::piped());
 
-        // Платформо-специфичные настройки
+        // Platform-specific settings
         #[cfg(windows)]
         command.creation_flags(0x08000000); // CREATE_NO_WINDOW
 
@@ -664,7 +652,7 @@ pub async fn build_project(window: Window, config: BuildConfig) -> Result<BuildR
             tauri::Error::from(anyhow::anyhow!(msg))
         })?;
 
-        // Обработка stdout
+        // Process stdout
         let stdout = child.stdout.take().expect("Failed to capture stdout");
         let stdout_task = tokio::spawn(async move {
             use tokio::io::{AsyncBufReadExt, BufReader};
@@ -674,13 +662,13 @@ pub async fn build_project(window: Window, config: BuildConfig) -> Result<BuildR
             while let Ok(Some(line)) = lines.next_line().await {
                 let log = format!("[STDOUT] {}", line.trim());
                 stdout_lines.push(log.clone());
-                // Не отправляем STDOUT в UI
+                // Do not send STDOUT to UI
                 // let _ = window_clone.emit("build-log", &log);
             }
             Ok::<Vec<String>, std::io::Error>(stdout_lines)
         });
 
-        // Обработка stderr
+        // Process stderr
         let stderr = child.stderr.take().expect("Failed to capture stderr");
         let stderr_task = tokio::spawn(async move {
             use tokio::io::{AsyncBufReadExt, BufReader};
@@ -690,13 +678,13 @@ pub async fn build_project(window: Window, config: BuildConfig) -> Result<BuildR
             while let Ok(Some(line)) = lines.next_line().await {
                 let log = format!("[STDERR] {}", line.trim());
                 stderr_lines.push(log.clone());
-                // Не отправляем STDERR в UI
+                // Do not send STDERR to UI
                 // let _ = window_clone.emit("build-log", &log);
             }
             Ok::<Vec<String>, std::io::Error>(stderr_lines)
         });
 
-        // Ожидаем завершения процесса
+        // Wait for process completion
         let status = child.wait().await.map_err(|e| {
             let msg = log_with_timestamp(&format!("Process wait failed: {}", e), LogLevel::Error);
             logs.push(msg.clone());
@@ -704,7 +692,7 @@ pub async fn build_project(window: Window, config: BuildConfig) -> Result<BuildR
             tauri::Error::from(anyhow::anyhow!(msg))
         })?;
 
-        // Дожидаемся завершения задач чтения stdout/stderr
+        // Wait for stdout/stderr reading tasks to complete
         let stdout_logs = stdout_task.await.map_err(|e| {
             let msg = log_with_timestamp(&format!("stdout task failed: {}", e), LogLevel::Error);
             logs.push(msg.clone());
@@ -718,7 +706,7 @@ pub async fn build_project(window: Window, config: BuildConfig) -> Result<BuildR
             tauri::Error::from(anyhow::anyhow!(msg))
         })??;
 
-        // Записываем stdout/stderr в txt_log_file
+        // Write stdout/stderr to txt_log_file
         if let Ok(mut txt_log_writer) = File::create(&txt_log_file) {
             for log in &stdout_logs {
                 writeln!(txt_log_writer, "{}", log).ok();
@@ -736,7 +724,7 @@ pub async fn build_project(window: Window, config: BuildConfig) -> Result<BuildR
             window.emit("build-log", &msg).ok();
         }
 
-        // Проверяем статус процесса
+        // Check process status
         let exit_code = status.code().unwrap_or(-1);
         let status_msg = log_with_timestamp(
             &format!("Build process exited with code: {}", exit_code),
@@ -755,10 +743,10 @@ pub async fn build_project(window: Window, config: BuildConfig) -> Result<BuildR
             });
         }
 
-        // Добавляем проверку результатов сборки
+        // Add build results check
         time::sleep(Duration::from_secs(2)).await;
 
-        // Проверка содержимого директории сборки
+        // Check build directory contents
         stages.push(format!("Checking build directory contents for combination {:?}", combination));
         let build_dir_name = build_config.config_name.as_deref().unwrap_or("Debug");
         let build_dir = project_path.join(build_dir_name);
@@ -771,7 +759,7 @@ pub async fn build_project(window: Window, config: BuildConfig) -> Result<BuildR
             return Ok(BuildResult { result: msg, logs, stages, success });
         }
 
-        // Проверяем размер файла
+        // Check file size
         if let Ok(metadata) = fs::metadata(&expected_bin_file) {
             let msg = log_with_timestamp(
                 &format!("Output file size: {} bytes", metadata.len()),
@@ -790,7 +778,7 @@ pub async fn build_project(window: Window, config: BuildConfig) -> Result<BuildR
             return Ok(BuildResult { result: msg, logs, stages, success });
         }
 
-        // Переименование bin файла
+        // Rename bin file
         stages.push(format!("Renaming output file for combination {:?}", combination));
         if let Err(e) = fs::rename(&expected_bin_file, &bin_dst) {
             let msg = log_with_timestamp(&format!("Error moving '{}': {}", expected_bin_file.display(), e), LogLevel::Error);
@@ -808,7 +796,7 @@ pub async fn build_project(window: Window, config: BuildConfig) -> Result<BuildR
         return Ok(BuildResult { result: msg, logs, stages, success: false });
     }
 
-    // Запись логов
+    // Write logs
     stages.push("Writing logs".to_string());
     if let Err(e) = File::create(&log_file_path).and_then (|mut f| {
         for log in &logs {
@@ -823,7 +811,7 @@ pub async fn build_project(window: Window, config: BuildConfig) -> Result<BuildR
         return Ok(BuildResult { result: msg, logs, stages, success });
     }
 
-    // Финализация результата сборки
+    // Finalize build result
     stages.push("Build process completed".to_string());
     let last_result = if success {
         log_with_timestamp("Build process completed successfully", LogLevel::Info)

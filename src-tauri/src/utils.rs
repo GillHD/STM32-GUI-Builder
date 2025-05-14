@@ -5,7 +5,7 @@ use std::fs;
 use std::path::Path;
 use tauri::{Error, command};
 
-// Уровни логирования
+// Log levels
 #[derive(Debug)]
 pub enum LogLevel {
     Debug,
@@ -23,9 +23,9 @@ pub fn validate_path(path: String) -> Result<(), String> {
         Err(format!("Path '{}' does not exist or is not a directory", path.display()))
     }
 }
-// Проверка, нужно ли логировать сообщение на основе уровня
+// Check if message should be logged based on level
 fn should_log(_level: &LogLevel) -> bool {
-    true // Логируем все уровни для отладки
+    true // Log all levels for debugging
 }
 
 pub fn log_with_timestamp(msg: &str, level: LogLevel) -> String {
@@ -43,7 +43,7 @@ pub fn log_with_timestamp(msg: &str, level: LogLevel) -> String {
 pub fn get_project_name(project_path: &Path) -> Result<String, Error> {
     let project_file = project_path.join(".project");
     if !project_file.exists() {
-        return Err(Error::from(anyhow::anyhow!("Файл .project не найден")));
+        return Err(Error::from(anyhow::anyhow!(".project file not found")));
     }
     let xml_content = fs::read_to_string(&project_file)
         .map_err(|e| Error::from(anyhow::anyhow!(e.to_string())))?;
@@ -64,13 +64,13 @@ pub fn get_project_name(project_path: &Path) -> Result<String, Error> {
         }
         buf.clear();
     }
-    Err(Error::from(anyhow::anyhow!("Имя проекта не найдено в .project файле")))
+    Err(Error::from(anyhow::anyhow!("Project name not found in .project file")))
 }
 
 pub fn get_cproject_configurations(project_path: &Path) -> Result<Vec<String>, Error> {
     let cproject_file = project_path.join(".cproject");
     if !cproject_file.exists() {
-        return Err(Error::from(anyhow::anyhow!("Файл .cproject не найден")));
+        return Err(Error::from(anyhow::anyhow!(".cproject file not found")));
     }
     let xml_content = fs::read_to_string(&cproject_file)
         .map_err(|e| Error::from(anyhow::anyhow!(e.to_string())))?;
@@ -97,7 +97,7 @@ pub fn get_cproject_configurations(project_path: &Path) -> Result<Vec<String>, E
                 _in_configuration = false;
             }
             Ok(Event::Eof) => break,
-            Err(e) => return Err(Error::from(anyhow::anyhow!(format!("Ошибка парсинга .cproject: {}", e)))),
+            Err(e) => return Err(Error::from(anyhow::anyhow!(format!("Error parsing .cproject: {}", e)))),
             _ => (),
         }
         buf.clear();

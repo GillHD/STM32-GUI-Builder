@@ -30,7 +30,7 @@ pub async fn kill_process_and_children(
     let mut system = System::new_all();
     system.refresh_processes();
 
-    // Проверка, является ли процесс STM32CubeIDE или java
+    // Check if process is STM32CubeIDE or java
     if let Some(process) = system.process(Pid::from(pid as usize)) {
         let process_name = process.name().to_lowercase();
         if !process_name.contains("stm32cubeide") && !process_name.contains("java") {
@@ -52,7 +52,7 @@ pub async fn kill_process_and_children(
         return Err(msg);
     }
 
-    // Попытка мягкого завершения процесса
+    // Attempt soft process termination
     let soft_termination_msg = log_with_timestamp(
         &format!("Attempting soft termination for PID {}", pid),
         LogLevel::Info,
@@ -177,10 +177,10 @@ pub async fn kill_process_and_children(
         }
     }
 
-    // Ожидание завершения процесса (таймаут 10 секунд)
+    // Wait for process termination (10 seconds timeout)
     time::sleep(Duration::from_secs(10)).await;
 
-    // Проверка, завершился ли процесс
+    // Check if process has terminated
     system.refresh_processes();
     if system.process(Pid::from(pid as usize)).is_some() {
         let msg = log_with_timestamp(
@@ -272,7 +272,7 @@ pub async fn kill_process_and_children(
         }
     }
 
-    // Проверка дочерних процессов
+    // Check child processes
     system.refresh_processes();
     let children: Vec<Pid> = system
         .processes()

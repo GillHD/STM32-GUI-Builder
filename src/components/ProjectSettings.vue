@@ -1,9 +1,9 @@
 <template>
   <section class="space-y-4">
-    <h2 class="text-xl font-semibold text-gray-700 border-b pb-2">Настройки проекта</h2>
+    <h2 class="text-xl font-semibold text-gray-700 border-b pb-2">Project Settings</h2>
     <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
       <div class="space-y-2">
-        <label for="project-path-btn" class="block text-sm font-medium text-gray-700">Директория проекта</label>
+        <label for="project-path-btn" class="block text-sm font-medium text-gray-700">Project Directory</label>
         <div class="flex relative">
           <button
             id="project-path-btn"
@@ -13,20 +13,20 @@
             style="border-top-right-radius: 0; border-bottom-right-radius: 0;"
             v-if="modelValue.projectPath"
           >
-            Выбрать директорию проекта
+            Select Project Directory
           </button>
           <button
             @click="$emit('select-project')"
             class="flex-1 py-2 px-4 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition"
             v-else
           >
-            Выбрать директорию проекта
+            Select Project Directory
           </button>
           <button
             v-if="modelValue.projectPath"
             @click="clearPath('projectPath')"
             class="py-2 px-3 bg-gray-200 hover:bg-red-100 text-gray-500 hover:text-red-600 rounded-r-lg border-l border-gray-300 transition"
-            title="Очистить путь"
+            title="Clear path"
             tabindex="-1"
             style="border-top-left-radius: 0; border-bottom-left-radius: 0;"
           >
@@ -36,7 +36,7 @@
         <p v-if="modelValue.projectPath" class="text-xs text-gray-500 truncate">{{ modelValue.projectPath }}</p>
       </div>
       <div class="space-y-2">
-        <label for="build-dir-btn" class="block text-sm font-medium text-gray-700">Папка для билдов</label>
+        <label for="build-dir-btn" class="block text-sm font-medium text-gray-700">Build Directory</label>
         <div class="flex relative">
           <button
             id="build-dir-btn"
@@ -46,20 +46,20 @@
             style="border-top-right-radius: 0; border-bottom-right-radius: 0;"
             v-if="modelValue.buildDir"
           >
-            Выбрать папку для билдов
+            Select Build Directory
           </button>
           <button
             @click="$emit('select-build-dir')"
             class="flex-1 py-2 px-4 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition"
             v-else
           >
-            Выбрать папку для билдов
+            Select Build Directory
           </button>
           <button
             v-if="modelValue.buildDir"
             @click="clearPath('buildDir')"
             class="py-2 px-3 bg-gray-200 hover:bg-red-100 text-gray-500 hover:text-red-600 rounded-r-lg border-l border-gray-300 transition"
-            title="Очистить путь"
+            title="Clear path"
             tabindex="-1"
             style="border-top-left-radius: 0; border-bottom-left-radius: 0;"
           >
@@ -69,7 +69,7 @@
         <p v-if="modelValue.buildDir" class="text-xs text-gray-500 truncate">{{ modelValue.buildDir }}</p>
       </div>
       <div class="space-y-2">
-        <label for="workspace-path-btn" class="block text-sm font-medium text-gray-700">Рабочее пространство</label>
+        <label for="workspace-path-btn" class="block text-sm font-medium text-gray-700">Workspace</label>
         <div class="flex relative">
           <button
             id="workspace-path-btn"
@@ -79,20 +79,20 @@
             style="border-top-right-radius: 0; border-bottom-right-radius: 0;"
             v-if="modelValue.workspacePath"
           >
-            Выбрать рабочее пространство
+            Select Workspace
           </button>
           <button
             @click="$emit('select-workspace')"
             class="flex-1 py-2 px-4 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition"
             v-else
           >
-            Выбрать рабочее пространство
+            Select Workspace
           </button>
           <button
             v-if="modelValue.workspacePath"
             @click="clearPath('workspacePath')"
             class="py-2 px-3 bg-gray-200 hover:bg-red-100 text-gray-500 hover:text-red-600 rounded-r-lg border-l border-gray-300 transition"
-            title="Очистить путь"
+            title="Clear path"
             tabindex="-1"
             style="border-top-left-radius: 0; border-bottom-left-radius: 0;"
           >
@@ -112,20 +112,20 @@
             style="border-top-right-radius: 0; border-bottom-right-radius: 0;"
             v-if="modelValue.cubeIdeExePath"
           >
-            Выбрать STM32CubeIDE EXE
+            Select STM32CubeIDE EXE
           </button>
           <button
             @click="$emit('select-ide')"
             class="flex-1 py-2 px-4 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition"
             v-else
           >
-            Выбрать STM32CubeIDE EXE
+            Select STM32CubeIDE EXE
           </button>
           <button
             v-if="modelValue.cubeIdeExePath"
             @click="clearPath('cubeIdeExePath')"
             class="py-2 px-3 bg-gray-200 hover:bg-red-100 text-gray-500 hover:text-red-600 rounded-r-lg border-l border-gray-300 transition"
-            title="Очистить путь"
+            title="Clear path"
             tabindex="-1"
             style="border-top-left-radius: 0; border-bottom-left-radius: 0;"
           >
@@ -171,7 +171,7 @@
             v-if="externalSettingsPath"
             @click="clearPath('externalSettingsPath')"
             class="py-2 px-3 bg-gray-200 hover:bg-red-100 text-gray-500 hover:text-red-600 rounded-r-lg border-l border-gray-300 transition"
-            title="Очистить путь"
+            title="Clear path"
             tabindex="-1"
             style="border-top-left-radius: 0; border-bottom-left-radius: 0;"
           >

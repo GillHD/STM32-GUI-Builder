@@ -1,6 +1,6 @@
 <template>
   <section class="space-y-2">
-    <h2 class="text-xl font-semibold text-gray-700 border-b pb-2">Логи сборки</h2>
+    <h2 class="text-xl font-semibold text-gray-700 border-b pb-2">Build Logs</h2>
     <div
       ref="logContainerEl"
       class="bg-gray-900 text-white p-4 rounded-lg font-mono text-sm leading-relaxed whitespace-pre-wrap"
@@ -10,7 +10,7 @@
       }"
       style="height: 28px * 10; max-height: 280px; min-height: 280px;"
     >
-      <p v-if="!logs?.length" class="text-gray-400">Логи отсутствуют</p>
+      <p v-if="!logs?.length" class="text-gray-400">No logs available</p>
       <RecycleScroller
         v-else
         :items="logs"

@@ -5,7 +5,7 @@
       :disabled="status === 'building' || isCancelling"
       class="flex-1 py-2 px-4 bg-green-600 hover:bg-green-700 text-white rounded-lg transition disabled:bg-gray-400 disabled:cursor-not-allowed"
     >
-      {{ status === 'building' ? 'Идет сборка...' : 'Собрать проект' }}
+      {{ status === 'building' ? 'Building...' : 'Build Project' }}
     </button>
     <button
       v-if="status === 'building'"
@@ -13,7 +13,7 @@
       :disabled="isCancelling"
       class="flex-1 py-2 px-4 bg-red-600 hover:bg-red-700 text-white rounded-lg transition disabled:bg-gray-400 disabled:cursor-not-allowed"
     >
-      {{ isCancelling ? 'Отмена...' : 'Отменить сборку' }}
+      {{ isCancelling ? 'Cancelling...' : 'Cancel Build' }}
     </button>
   </div>
 </template>

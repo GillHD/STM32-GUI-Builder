@@ -1,6 +1,6 @@
 <template>
   <div class="space-y-2">
-    <label class="block text-sm font-medium text-gray-700">Очистить перед сборкой</label>
+    <label class="block text-sm font-medium text-gray-700">Clean Before Build</label>
     <label class="flex items-center">
       <input
         type="checkbox"

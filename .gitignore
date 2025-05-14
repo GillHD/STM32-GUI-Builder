@@ -34,3 +34,4 @@ Cargo.lock
 /src-tauri/build_settings.json
 
 
+*.old

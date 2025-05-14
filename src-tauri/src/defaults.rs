@@ -1,121 +1,59 @@
-pub const DEFAULT_BUILD_SETTINGS: &str = r#"{
-  "version": "1.0",
-  "build_settings": [
-    {
-      "id": "device_type",
-      "label": "Device Type",
-      "value": "devtype",
-      "define": "DEVICE_TYPE",
-      "description": "Device type number (4-32). Each number represents a specific hardware variant.",
-      "field_type": "range",
-      "format": "number",
-      "validation": {
-        "min": 4,
-        "max": 32
-      }
-    },
-    {
-      "id": "device_mode",
-      "label": "Device Mode",
-      "value": "mode",
-      "description": "Operating mode that determines device behavior and available features",
-      "field_type": "select",
-      "format": "string",
-      "options": [
-        {
-          "label": "MDB Gateway",
-          "value": "MDB_GATEWAY",
-          "define": "DEVICE_MODE_MDB_GATEWAY",
-          "description": "MDB Protocol gateway mode for vending machines"
-        },
-        {
-          "label": "Micromarket",
-          "value": "MICROMARKET",
-          "define": "DEVICE_MODE_MICROMARKET",
-          "description": "Automated retail point of sale mode"
-        },
-        {
-          "label": "Retail",
-          "value": "RETAIL",
-          "define": "DEVICE_MODE_RETAIL",
-          "description": "Standard retail payment terminal mode"
-        },
-        {
-          "label": "Transport Ticket Validator",
-          "value": "TRANSPORT_TICKET_VALIDATOR",
-          "define": "DEVICE_MODE_TRANSPORT_TICKET_VALIDATOR",
-          "description": "Public transport ticket validation mode"
-        },
-        {
-          "label": "AZS",
-          "value": "AZS",
-          "define": "DEVICE_MODE_AZS",
-          "description": "Gas station payment terminal mode"
-        },
-        {
-          "label": "Gashapon",
-          "value": "GASHAPON",
-          "define": "DEVICE_MODE_GASHAPON",
-          "description": "Vending machine mode for capsule toys"
-        },
-        {
-          "label": "VRelay",
-          "value": "VRELAY",
-          "define": "DEVICE_MODE_VRELAY",
-          "description": "Virtual relay control mode"
-        }
-      ]
-    },
-    {
-      "id": "languages",
-      "label": "Languages",
-      "value": "lang",
-      "description": "Supported interface languages. At least one language must be selected.",
-      "field_type": "checkbox_group",
-      "format": "string[]",
-      "min_selected": 1,
-      "options": [
-        {
-          "label": "English",
-          "value": "en",
-          "define": "LANG_EN",
-          "description": "English language support"
-        },
-        {
-          "label": "Russian",
-          "value": "ru",
-          "define": "LANG_RU",
-          "description": "Russian language support"
-        },
-        {
-          "label": "Kazakh",
-          "value": "kz",
-          "define": "LANG_KZ",
-          "description": "Kazakh language support"
-        }
-      ]
-    },
-    {
-      "id": "additional_options",
-      "label": "Additional Options",
-      "value": "opt",
-      "description": "Optional features and payment systems that can be enabled",
-      "field_type": "checkbox_group",
-      "format": "string[]",
-      "options": [
-        {
-          "label": "BelCard Support",
-          "value": "BelCard",
-          "define": "ENABLE_BELCARD",
-          "description": "Enable support for BelCard payment system"
-        },
-        {
-          "label": "Kaspi QR Support",
-          "value": "KASPI_QR",
-          "define": "ENABLE_KASPI_QR",
-          "description": "Enable support for Kaspi QR payments"
-        }
-      ]
-    }
-  ]
-}"#;
+pub const DEFAULT_BUILD_SETTINGS: &str = r#"# build_settings.yaml
+version: "1.0"
+
+# build_settings sample file
+build_settings:
+  # range sample
+  - id: device_type       # Any unique identifier for the setting
+    label: "Device Type"  # User-friendly label for the setting naming on the UI
+    value: "type"         # The value that will be used in the naming of the output file
+    define: DEVICE_TYPE   # define for the setting in С/C++ code
+    description: "Device type number (4-32). Each number represents a specific hardware variant." # Description of the setting
+    field_type: range     # Type of field in the UI (e.g., range, select, checkbox_group)
+    format: number        # Format of the value (e.g., number, string)
+    validation:           # Validation rules for the setting 
+      min: 4              # Minimum value for the range
+      max: 32             # Maximum value for the range
+
+  # select sample
+  - id: device_mode       # Unique identifier for the setting
+    label: "Device Mode"  # User-friendly label for the setting naming on the UI
+    value: "mode"         # The value that will be used in the naming of the output file
+    description: "Operating mode that determines device behavior and available features"          # Description of the setting
+    field_type: select    # Type of field in the UI (e.g., range, select, checkbox_group)
+    format: string        # Format of the value (e.g., number, string)
+    options:              # Options for the select field
+      - label: "GPIO_EN"  # User-friendly label for the option
+        value: "GPIO"     # Value that will be used in the naming of the output file
+        define: "DEVICE_MODE_GPIO"    # define for the option in С/C++ code
+        description: "Any text"       # Description of the option
+      
+      - label: "adc_ext"  # User-friendly label for the option
+        value: "ADC_EXT"  # Value that will be used in the naming of the output file
+        define: "DEVICE_MODE_ADC_EXT" # define for the option in С/C++ code
+        description: "Any text"       # Description of the option
+
+  # checkbox_group sample
+  - id: languages       # Unique identifier for the setting
+    label: "Languages"  # User-friendly label for the setting naming on the UI
+    value: "lang"       # The value that will be used in the naming of the output file
+    description: "Supported interface languages. At least one language must be selected." # Description of the setting
+    field_type: checkbox_group  # Type of field in the UI (e.g., range, select, checkbox_group)
+    format: string[]    # Format of the value (e.g., number, string)
+    min_selected: 1     # Minimum number of options that must be selected 
+    options:            # Options for the checkbox_group field
+      - label: "English"  # User-friendly label for the option
+        value: "en"       # Value that will be used in the naming of the output file
+        define: "LANG_EN" # define for the option in С/C++ code
+        description: "English language support"                         # Description of the option   
+      
+      - label: "Armenian"  # User-friendly label for the option
+        value: "ar"       # Value that will be used in the naming of the output file
+        define: "LANG_AR" # define for the option in С/C++ code
+        description: "Armenian language support"                         # Description of the option
+      
+      - label: "Kazakh"   # User-friendly label for the option
+        value: "kz"       # Value that will be used in the naming of the output file
+        define: "LANG_KZ" # define for the option in С/C++ code
+        description: "Kazakh language support"                          # Description of the option
+"#;         

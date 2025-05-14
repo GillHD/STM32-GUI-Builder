@@ -51,17 +51,17 @@ pub struct BuildSettingsConfig {
 
 impl BuildSettingsConfig {
     pub fn load() -> Result<Self, String> {
-        let config_path = Path::new("build_settings.json");
+        let config_path = Path::new("build_settings.yaml");
         if !config_path.exists() {
             if let Err(e) = fs::write(config_path, DEFAULT_BUILD_SETTINGS) {
-                return Err(format!("Failed to create default build_settings.json: {}", e));
+                return Err(format!("Failed to create default build_settings.yaml: {}", e));
             }
         }
 
         let content = fs::read_to_string(config_path)
             .map_err(|e| format!("Error reading config: {}", e))?;
 
-        serde_json::from_str(&content)
+        serde_yaml::from_str(&content)
             .map_err(|e| format!("Error parsing config: {}", e))
     }
 
@@ -146,30 +146,29 @@ pub fn parse_range_string(range_str: &str, min: i32, max: i32) -> Result<Vec<i32
     Ok(result)
 }
 
-// Добавляем новую команду для проверки наличия build_settings.json в проекте
+// Добавляем новую команду для проверки наличия build_settings.yaml в проекте
 #[command]
 pub async fn check_project_settings(project_path: String) -> Result<bool, String> {
-    let settings_path = Path::new(&project_path).join("build_settings.json");
+    let settings_path = Path::new(&project_path).join("build_settings.yaml");
     Ok(settings_path.exists())
 }
 
 // Make load_settings_schema async and rename it
 #[command]
 pub async fn load_build_settings_schema() -> Result<BuildSettingsConfig, String> {
-    let schema_path = "build_settings.json";
+    let schema_path = "build_settings.yaml";
     
     if !Path::new(schema_path).exists() {
         fs::write(schema_path, DEFAULT_BUILD_SETTINGS)
             .map_err(|e| format!("Error creating settings file: {}", e))?;
     }
     
-    // Use async file operations
     let content = tokio::fs::read_to_string(schema_path)
         .await
         .map_err(|e| format!("Error reading build settings schema: {}", e))?;
     
-    serde_json::from_str(&content)
-        .map_err(|e| format!("Error parsing build settings schema: {}. Line: {}, Column: {}", e, e.line(), e.column()))
+    serde_yaml::from_str(&content)
+        .map_err(|e| format!("Error parsing build settings schema: {}", e))
 }
 
 // #[tauri::command]
@@ -181,7 +180,7 @@ pub async fn load_build_settings_schema() -> Result<BuildSettingsConfig, String>
 //             if let Ok(Event { .. }) = res {
 //                 tx.send(()).ok();
 //             }
-//         }).expect("Failed to create watcher");
+            //         }).expect("Failed to create watcher");
 
 //         watcher
 //             .watch(Path::new("build_settings.json"), RecursiveMode::NonRecursive)

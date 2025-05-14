@@ -230,7 +230,7 @@ async function selectExternalSettings() {
       directory: false, // ВАЖНО: явно указываем, что нужен файл, а не папка!
       filters: [{
         name: 'Build Settings',
-        extensions: ['json']
+        extensions: ['yaml', 'yml']  // Changed from json to yaml
       }]
     });
 

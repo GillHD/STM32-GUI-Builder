@@ -5,7 +5,28 @@ use std::fs;
 use std::path::Path;
 use tauri::{Error, command};
 use quick_xml::name::QName;
+// use tauri::Window;
+// use crate::utils::{log_with_timestamp, LogLevel};
 
+pub fn validate_project_file(project_path: &Path) -> Result<(), tauri::Error> {
+    let project_file = project_path.join(".project");
+    let content = fs::read_to_string(&project_file)
+        .map_err(|e| tauri::Error::from(anyhow::anyhow!("Error reading '{}': {}", project_file.display(), e)))?;
+    if !content.contains("<projectDescription>") {
+        return Err(tauri::Error::from(anyhow::anyhow!("File '{}' is not a valid .project file", project_file.display())));
+    }
+    Ok(())
+}
+
+pub fn validate_cproject_file(project_path: &Path) -> Result<(), tauri::Error> {
+    let cproject_file = project_path.join(".cproject");
+    let content = fs::read_to_string(&cproject_file)
+        .map_err(|e| tauri::Error::from(anyhow::anyhow!("Error reading '{}': {}", cproject_file.display(), e)))?;
+    if !content.contains("<cproject") {
+        return Err(tauri::Error::from(anyhow::anyhow!("File '{}' is not a valid .cproject file", cproject_file.display())));
+    }
+    Ok(())
+}
 
 // Log levels
 #[derive(Debug)]

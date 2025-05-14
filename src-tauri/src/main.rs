@@ -7,10 +7,11 @@ mod builder;
 mod cancel;
 mod config;
 mod defaults;
-mod ld_files;
 mod models;
 mod process;
 mod utils;
+mod build_combinations;
+mod build_config_gen;
 
 fn main() {
     tauri::Builder::default()

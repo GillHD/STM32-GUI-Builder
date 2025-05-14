@@ -117,7 +117,7 @@ impl BuildSettingsConfig {
     }
 }
 
-// Сделать функцию публичной для использования в других модулях
+
 pub fn parse_range_string(range_str: &str, min: i32, max: i32) -> Result<Vec<i32>, String> {
     let mut result = Vec::new();
     for part in range_str.split(',') {
@@ -138,7 +138,7 @@ pub fn parse_range_string(range_str: &str, min: i32, max: i32) -> Result<Vec<i32
     Ok(result)
 }
 
-// Добавляем новую команду для проверки наличия build_settings.yaml в проекте
+
 #[command]
 pub async fn check_project_settings(project_path: String) -> Result<bool, String> {
     let settings_path = Path::new(&project_path).join("build_settings.yaml");

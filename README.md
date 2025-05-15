@@ -42,8 +42,8 @@ With an intuitive graphical interface, it simplifies project setup, build config
   ```bash
   cargo install tauri-cli
   ```
-- **STM32CubeIDE**: Installed and accessible in your system
-- **npm** or **yarn**: For frontend dependencies
+- **[STM32CubeIDE](https://www.st.com/en/development-tools/stm32cubeide.html)**: Installed and accessible in your system
+- **npm** or **yarn**: For frontend dependencies usally installed with node.js
 
 ---
 

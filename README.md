@@ -35,8 +35,8 @@ With an intuitive graphical interface, it simplifies project setup, build config
 
 ## 📋 Prerequisites
 
-- **Node.js**: v16 or higher
-- **Rust**: v1.65 or higher
+- **[Node.js](https://nodejs.org/en/)**: v22 or higher
+- **[Rust](https://www.rust-lang.org/tools/install)**: v1.65 or higher
 - **Tauri CLI**:  
   ```bash
   cargo install tauri-cli

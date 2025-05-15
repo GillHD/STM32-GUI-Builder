@@ -14,12 +14,12 @@ STM32-GUI-Builder is a desktop application that automates and simplifies the pro
 
 ```mermaid
 flowchart TD
-    A[User] -->|Launches GUI| B[STM32-GUI-Builder (Frontend)]
-    B -->|Sends settings| C[STM32-GUI-Builder (Rust Backend)]
+    A[User] -->|Launches GUI| B[STM32-GUI-Builder Frontend]
+    B -->|Sends settings| C[STM32-GUI-Builder Rust Backend]
     C -->|Reads| D[build_settings.yaml]
     C -->|Validates| E[STM32CubeIDE Project & Workspace]
     C -->|Generates| F[build_config.h]
-    C -->|Runs| G[STM32CubeIDE (Headless)]
+    C -->|Runs| G[STM32CubeIDE Headless]
     G -->|Builds| H[Output Binaries & Logs]
     C -->|Updates| B
     B -->|Shows logs, status| A

@@ -35,6 +35,7 @@ With an intuitive graphical interface, it simplifies project setup, build config
 
 ## 📋 Prerequisites
 
+- **[Git](https://git-scm.com/downloads)**: any
 - **[Node.js](https://nodejs.org/en/)**: v22 or higher
 - **[Rust](https://www.rust-lang.org/tools/install)**: v1.65 or higher
 - **[C++ Build Tools](https://visualstudio.microsoft.com/ru/visual-cpp-build-tools/)**: or Visual Studio with C++ Build Tools for build Rust on Windows 
@@ -77,6 +78,8 @@ With an intuitive graphical interface, it simplifies project setup, build config
    yarn tauri build
    ```
    > Native binaries will be generated in `src-tauri/target/release`.
+
+   > The Automticaly generated `build_settings.yaml` after running the program is located in the `src-tauri` folder.
 
 ---
 

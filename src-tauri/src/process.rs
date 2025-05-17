@@ -1,6 +1,6 @@
 use crate::models::BuildConfig;
 use crate::utils::{log_with_timestamp, LogLevel};
-use sysinfo::{Pid, ProcessExt, System, SystemExt};
+use sysinfo::{Pid, System, ProcessesToUpdate};
 use tauri::{command, Window, Emitter};
 use tokio::sync::Mutex;
 use tokio::time::{self, Duration};
@@ -28,20 +28,23 @@ pub async fn kill_process_and_children(
 ) -> Result<(), String> {
     let mut logs = Vec::new();
     let mut system = System::new_all();
-    system.refresh_processes();
+    system.refresh_all();
 
     // Check if process is STM32CubeIDE or java
     if let Some(process) = system.process(Pid::from(pid as usize)) {
-        let process_name = process.name().to_lowercase();
-        if !process_name.contains("stm32cubeide") && !process_name.contains("java") {
+        let process_name = process.name().to_str();
+
+        if !process_name.map_or(false, |name| name.contains("stm32cubeide") || name.contains("java")) {
+            let name_display = process_name.unwrap_or("<unknown>");
             let msg = log_with_timestamp(
-                &format!("Process PID {} is not an STM32CubeIDE process (name: {})", pid, process_name),
+                &format!("Process PID {} is not an STM32CubeIDE process (name: {})", pid, name_display),
                 LogLevel::Error,
             );
             logs.push(msg.clone());
             window.emit("build-log", &msg).ok();
             return Err(msg);
         }
+
     } else {
         let msg = log_with_timestamp(
             &format!("Process with PID {} not found", pid),
@@ -181,7 +184,7 @@ pub async fn kill_process_and_children(
     time::sleep(Duration::from_secs(10)).await;
 
     // Check if process has terminated
-    system.refresh_processes();
+    system.refresh_processes(ProcessesToUpdate::All, true);
     if system.process(Pid::from(pid as usize)).is_some() {
         let msg = log_with_timestamp(
             &format!("Process PID {} still running, attempting force kill", pid),
@@ -273,7 +276,7 @@ pub async fn kill_process_and_children(
     }
 
     // Check child processes
-    system.refresh_processes();
+    system.refresh_processes(ProcessesToUpdate::All, true);
     let children: Vec<Pid> = system
         .processes()
         .iter()

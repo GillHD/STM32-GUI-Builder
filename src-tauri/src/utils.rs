@@ -71,7 +71,7 @@ pub fn get_project_name(project_path: &Path) -> Result<String, Error> {
     let xml_content = fs::read_to_string(&project_file)
         .map_err(|e| Error::from(anyhow::anyhow!(e.to_string())))?;
     let mut reader = Reader::from_str(&xml_content);
-    reader.trim_text(true);
+    reader.config_mut().trim_text(true);
 
     loop {
         match reader.read_event() {
@@ -96,7 +96,7 @@ pub fn get_cproject_configurations(project_path: &Path) -> Result<Vec<String>, E
     let xml_content = fs::read_to_string(&cproject_file)
         .map_err(|e| Error::from(anyhow::anyhow!(e.to_string())))?;
     let mut reader = Reader::from_str(&xml_content);
-    reader.trim_text(true);
+    reader.config_mut().trim_text(true);
     let mut configs = Vec::new();
     let mut _in_configuration = false;
 

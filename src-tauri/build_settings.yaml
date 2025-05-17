@@ -1,6 +1,11 @@
 # build_settings.yaml
 version: "1.0"
 
+# This file describes the build settings for a software project. 
+# It includes a version number and a list of settings that can be configured during the build process.
+# Each setting has an identifier, label, value, definition, description, field type, format, and validation rules.
+# The settings include options for selecting device types, modes, and supported languages.
+
 # build_settings sample file
 build_settings:
   # range sample

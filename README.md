@@ -79,6 +79,8 @@ With an intuitive graphical interface, it simplifies project setup, build config
    ```
    > Native binaries will be generated in `src-tauri/target/release`.
 
+   > The Automticaly generated `build_settings.yaml` after running the program is located in the `src-tauri` folder.
+
 ---
 
 ## 📖 Usage

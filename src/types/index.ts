@@ -43,7 +43,7 @@ export interface Settings {
 }
 
 export interface BuildMessage {
-  type: 'success' | 'error';
+  type: 'success' | 'error' | 'info';  // Add 'info' type
   text: string;
 }
 

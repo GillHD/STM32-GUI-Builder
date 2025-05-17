@@ -1,4 +1,5 @@
 import { ref } from 'vue';
+import { listen } from '@tauri-apps/api/event';
 import type { BuildMessage } from '../types/build';
 import type { BuildConfig, BuildStatusType, BuildProcessReturn, LocalBuildConfig, Settings } from '../types/index';
 import { executeBuild, cancelBuild } from '../services/buildService';
@@ -31,6 +32,9 @@ export function useBuildProcess(): BuildProcessReturn {
   const buildLogs = ref<string[]>([]);
   const currentStdout = ref('');
   const isCancelling = ref(false);
+
+  // Only one listener should be active at a time
+  let unlistenCancel: (() => void) | null = null;
 
   async function build() {
     // Validate required fields
@@ -68,6 +72,19 @@ export function useBuildProcess(): BuildProcessReturn {
       };
       
       const result = await executeBuild(config);
+      // Если сборка была отменена через invoke (build_project вернул cancel)
+      if (
+        typeof result.result === 'string' &&
+        result.result.toLowerCase().includes('cancelled')
+      ) {
+        buildStatus.value = 'idle';
+        buildMessages.value.push({
+          type: 'success',
+          text: 'Build cancelled by user'
+        });
+        isCancelling.value = false;
+        return;
+      }
       buildStatus.value = result.success ? 'success' : 'error';
       
       buildMessages.value.push({
@@ -85,11 +102,63 @@ export function useBuildProcess(): BuildProcessReturn {
 
   async function handleCancel() {
     if (!isCancelling.value && buildStatus.value === 'building') {
-      isCancelling.value = true;
-      await cancelBuild();
-      buildStatus.value = 'cancelled';
-      isCancelling.value = false;
+      try {
+        console.log('[DEBUG] Cancel initiated');
+        isCancelling.value = true;
+
+        // Set up listener first
+        const unlisten = await listen<boolean>('build-cancelled', () => {
+          console.log('[DEBUG] Received build-cancelled event');
+          resetAfterCancel();
+          unlisten();
+        });
+
+        console.log('[DEBUG] Cancel listener set up, sending cancel command');
+        
+        // Send cancel command
+        await cancelBuild();
+        console.log('[DEBUG] Cancel command sent');
+
+        // Fallback timer
+        const timeoutId = setTimeout(() => {
+          console.log('[DEBUG] Cancel timeout triggered');
+          if (isCancelling.value) {
+            console.log('[DEBUG] Forcing cancel reset');
+            resetAfterCancel();
+            unlisten();
+          }
+        }, 1500);
+
+        // Clean up timeout on event
+        listen('build-cancelled', () => {
+          console.log('[DEBUG] Clearing timeout');
+          clearTimeout(timeoutId);
+        });
+
+      } catch (error) {
+        console.error('[DEBUG] Cancel error:', error);
+        resetAfterCancel();
+      }
     }
+  }
+
+  function resetAfterCancel() {
+    console.log('[DEBUG] Resetting state after cancel');
+    if (!isCancelling.value) {
+      console.log('[DEBUG] Cancel already reset, skipping');
+      return;
+    }
+    
+    buildStatus.value = 'idle';
+    currentStdout.value = '';
+    isCancelling.value = false;
+    
+    buildMessages.value = [{
+      type: 'success',
+      text: 'Build cancelled by user'
+    }];
+    
+    console.log('[DEBUG] Cancel reset complete');
   }
 
   return {

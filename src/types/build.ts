@@ -65,7 +65,7 @@ export interface LocalBuildConfig {
 }
 
 export interface BuildMessage {
-  type: 'success' | 'error';
+  type: 'success' | 'error' | 'info';
   text: string;
 }
 

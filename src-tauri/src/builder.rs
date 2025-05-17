@@ -2,7 +2,7 @@ use crate::{
     build_combinations::generate_build_combinations,
     build_config_gen::generate_build_config_h,
     models::{BuildConfig, BuildResult},
-    process::BUILD_CONFIG,
+    process::{BUILD_CANCEL_NOTIFY, BUILD_CONFIG, BUILD_CHILD},
     utils::{log_with_timestamp, get_project_name, get_cproject_configurations, LogLevel, validate_project_file, validate_cproject_file},
     config::{BuildSettingsConfig, parse_range_string, load_build_settings_schema}
 };
@@ -13,6 +13,8 @@ use std::path::Path;
 use tauri::{command, Window, Emitter};
 use tokio::process::Command;
 use tokio::time::{self, Duration};
+use tokio::sync::Notify;
+use std::sync::Arc;
 
 // Add platform-specific imports
 #[cfg(unix)]
@@ -497,7 +499,11 @@ pub async fn build_project(window: Window, config: BuildConfig) -> Result<BuildR
 
         // Platform-specific settings
         #[cfg(windows)]
-        command.creation_flags(0x08000000); // CREATE_NO_WINDOW
+        {
+            use std::os::windows::process::CommandExt;
+            // 0x08000000 = CREATE_NO_WINDOW, 0x00000200 = CREATE_NEW_PROCESS_GROUP
+            command.creation_flags(0x08000000 | 0x00000200);
+        }
 
         #[cfg(all(unix, target_os = "macos"))]
         unsafe {
@@ -515,137 +521,209 @@ pub async fn build_project(window: Window, config: BuildConfig) -> Result<BuildR
             });
         }
 
-        let mut child = command.spawn().map_err(|e| {
+        let child = command.spawn().map_err(|e| {
             let msg = log_with_timestamp(&format!("Failed to start STM32CubeIDE process: {}", e), LogLevel::Error);
             log_and_emit(&window, &mut logs, msg.clone());
             tauri::Error::from(anyhow::anyhow!(msg))
         })?;
 
-        // Process stdout
-        let stdout = child.stdout.take().expect("Failed to capture stdout");
+        // --- Сохраняем handle процесса ---
+        {
+            let mut child_guard = BUILD_CHILD.lock().await;
+            *child_guard = Some(child);
+        }
+        // --- конец вставки ---
+
+        // После этого используйте child_guard.as_mut().unwrap() если нужно, или продолжайте работу как раньше:
+        // let stdout = child.stdout.take().expect("Failed to capture stdout");
+        // ...existing code...
+        let mut child_guard = BUILD_CHILD.lock().await;
+        let child_ref = child_guard.as_mut().unwrap();
+        let stdout = child_ref.stdout.take().expect("Failed to capture stdout");
+        let stderr = child_ref.stderr.take().expect("Failed to capture stderr");
+
+        use tokio::io::{AsyncBufReadExt, BufReader};
+        let _window_clone = window.clone();
         let stdout_task = tokio::spawn(async move {
-            use tokio::io::{AsyncBufReadExt, BufReader};
             let reader = BufReader::new(stdout);
             let mut lines = reader.lines();
             let mut stdout_lines = Vec::new();
             while let Ok(Some(line)) = lines.next_line().await {
                 let log = format!("[STDOUT] {}", line.trim());
                 stdout_lines.push(log.clone());
-                // Do not send STDOUT to UI
-                // let _ = window_clone.emit("build-log", &log);
             }
             Ok::<Vec<String>, std::io::Error>(stdout_lines)
         });
 
-        // Process stderr
-        let stderr = child.stderr.take().expect("Failed to capture stderr");
+        let _window_clone = window.clone();
         let stderr_task = tokio::spawn(async move {
-            use tokio::io::{AsyncBufReadExt, BufReader};
             let reader = BufReader::new(stderr);
             let mut lines = reader.lines();
             let mut stderr_lines = Vec::new();
             while let Ok(Some(line)) = lines.next_line().await {
                 let log = format!("[STDERR] {}", line.trim());
                 stderr_lines.push(log.clone());
-                // Do not send STDERR to UI
-                // let _ = window_clone.emit("build-log", &log);
             }
             Ok::<Vec<String>, std::io::Error>(stderr_lines)
         });
 
-        // Wait for process completion
-        let status = child.wait().await.map_err(|e| {
-            let msg = log_with_timestamp(&format!("Process wait failed: {}", e), LogLevel::Error);
-            log_and_emit(&window, &mut logs, msg.clone());
-            tauri::Error::from(anyhow::anyhow!(msg))
-        })?;
+        // --- асинхронное ожидание с возможностью отмены ---
+        let child_wait = child_ref.wait();
+        let cancel_notify = BUILD_CANCEL_NOTIFY.clone();
 
-        // Wait for stdout/stderr reading tasks to complete
-        let stdout_logs = stdout_task.await.map_err(|e| {
-            let msg = log_with_timestamp(&format!("stdout task failed: {}", e), LogLevel::Error);
-            log_and_emit(&window, &mut logs, msg.clone());
-            tauri::Error::from(anyhow::anyhow!(msg))
-        })??;
-        let stderr_logs = stderr_task.await.map_err(|e| {
-            let msg = log_with_timestamp(&format!("stderr task failed: {}", e), LogLevel::Error);
-            log_and_emit(&window, &mut logs, msg.clone());
-            tauri::Error::from(anyhow::anyhow!(msg))
-        })??;
+        tokio::select! {
+            status = child_wait => {
+                let status = status.map_err(|e| {
+                    let msg = log_with_timestamp(&format!("Process wait failed: {}", e), LogLevel::Error);
+                    log_and_emit(&window, &mut logs, msg.clone());
+                    tauri::Error::from(anyhow::anyhow!(msg))
+                })?;
 
-        // Write stdout/stderr to txt_log_file
-        if let Ok(mut txt_log_writer) = File::create(&txt_log_file) {
-            for log in &stdout_logs {
-                writeln!(txt_log_writer, "{}", log).ok();
+                // Wait for stdout/stderr reading tasks to complete
+                let stdout_logs = stdout_task.await.map_err(|e| {
+                    let msg = log_with_timestamp(&format!("stdout task failed: {}", e), LogLevel::Error);
+                    log_and_emit(&window, &mut logs, msg.clone());
+                    tauri::Error::from(anyhow::anyhow!(msg))
+                })??;
+                let stderr_logs = stderr_task.await.map_err(|e| {
+                    let msg = log_with_timestamp(&format!("stderr task failed: {}", e), LogLevel::Error);
+                    log_and_emit(&window, &mut logs, msg.clone());
+                    tauri::Error::from(anyhow::anyhow!(msg))
+                })??;
+
+                // Write stdout/stderr to txt_log_file
+                if let Ok(mut txt_log_writer) = File::create(&txt_log_file) {
+                    for log in &stdout_logs {
+                        writeln!(txt_log_writer, "{}", log).ok();
+                    }
+                    for log in &stderr_logs {
+                        writeln!(txt_log_writer, "{}", log).ok();
+                    }
+                    txt_log_writer.flush().ok();
+                } else {
+                    let msg = log_with_timestamp(
+                        &format!("Failed to create log file '{}'", txt_log_file.display()),
+                        LogLevel::Warning
+                    );
+                    log_and_emit(&window, &mut logs, msg.clone());
+                }
+
+                // Check process status
+                let exit_code = status.code().unwrap_or(-1);
+                let status_msg = log_with_timestamp(
+                    &format!("Build process exited with code: {}", exit_code),
+                    if exit_code == 0 { LogLevel::Info } else { LogLevel::Error }
+                );
+                log_and_emit(&window, &mut logs, status_msg.clone());
+
+                if exit_code != 0 {
+                    success = false;
+                    return Ok(BuildResult {
+                        result: format!("Build failed with exit code: {}", exit_code),
+                        logs,
+                        stages,
+                        success
+                    });
+                }
+
+                // Add build results check
+                time::sleep(Duration::from_secs(2)).await;
+
+                // Check build directory contents
+                stages.push(format!("Checking build directory contents for combination {:?}", combination));
+                let build_dir_name = build_config.config_name.as_deref().unwrap_or("Debug");
+                let build_dir = project_path.join(build_dir_name);
+                let expected_bin_file = build_dir.join(format!("{}.bin", project_name.to_lowercase()));
+                if !build_dir.exists() || !expected_bin_file.exists() {
+                    let msg = log_with_timestamp(&format!("Error: Output file '{}.bin' not found in '{}'", project_name.to_lowercase(), build_dir.display()), LogLevel::Error);
+                    log_and_emit(&window, &mut logs, msg.clone());
+                    success = false;
+                    return Ok(BuildResult { result: msg, logs, stages, success });
+                }
+
+                // Check file size
+                if let Ok(metadata) = fs::metadata(&expected_bin_file) {
+                    let msg = log_with_timestamp(
+                        &format!("Output file size: {} bytes", metadata.len()),
+                        LogLevel::Info
+                    );
+                    log_and_emit(&window, &mut logs, msg.clone());
+                } else {
+                    let msg = log_with_timestamp(
+                        &format!("Failed to get output file metadata: {}", expected_bin_file.display()),
+                        LogLevel::Error
+                    );
+                    log_and_emit(&window, &mut logs, msg.clone());
+                    success = false;
+                    return Ok(BuildResult { result: msg, logs, stages, success });
+                }
+
+                // Rename bin file
+                stages.push(format!("Renaming output file for combination {:?}", combination));
+                if let Err(e) = fs::rename(&expected_bin_file, &bin_dst) {
+                    let msg = log_with_timestamp(&format!("Error moving '{}': {}", expected_bin_file.display(), e), LogLevel::Error);
+                    log_and_emit(&window, &mut logs, msg.clone());
+                    success = false;
+                    return Ok(BuildResult { result: msg, logs, stages, success });
+                }
+
+                // После завершения:
+                {
+                    let mut child_guard = BUILD_CHILD.lock().await;
+                    *child_guard = None;
+                }
             }
-            for log in &stderr_logs {
-                writeln!(txt_log_writer, "{}", log).ok();
+            _ = cancel_notify.notified() => {
+                println!("[CANCEL] Cancel notification received in builder.rs");
+                
+                // Notify frontend before killing process
+                let msg = log_with_timestamp("Build cancellation in progress", LogLevel::Info);
+                log_and_emit(&window, &mut logs, msg);
+                
+                // Kill the process and tasks
+                let _ = child_ref.kill().await;
+                let _ = stdout_task.abort();
+                let _ = stderr_task.abort();
+                
+                // Wait a bit to ensure process is killed
+                tokio::time::sleep(Duration::from_millis(300)).await;
+                
+                // Release handle and update config atomically
+                {
+                    let mut child_guard = BUILD_CHILD.lock().await;
+                    *child_guard = None;
+                    
+                    let mut config_guard = BUILD_CONFIG.lock().await;
+                    if let Some(config) = config_guard.as_mut() {
+                        config.cancelled = Some(true);
+                    }
+                }
+
+                // Send events in order with confirmation
+                let msg = log_with_timestamp("Build process cancelled", LogLevel::Info);
+                log_and_emit(&window, &mut logs, msg.clone());
+                
+                // Send build-cancelled event and wait for confirmation
+                match window.emit("build-cancelled", true) {
+                    Ok(_) => println!("[CANCEL] build-cancelled event sent successfully"),
+                    Err(e) => println!("[CANCEL] Failed to send build-cancelled event: {}", e),
+                }
+
+                success = false;
+                return Ok(BuildResult { 
+                    result: msg,
+                    logs, 
+                    stages,
+                    success 
+                });
             }
-            txt_log_writer.flush().ok();
-        } else {
-            let msg = log_with_timestamp(
-                &format!("Failed to create log file '{}'", txt_log_file.display()),
-                LogLevel::Warning
-            );
-            log_and_emit(&window, &mut logs, msg.clone());
         }
+        // --- конец асинхронного ожидания ---
 
-        // Check process status
-        let exit_code = status.code().unwrap_or(-1);
-        let status_msg = log_with_timestamp(
-            &format!("Build process exited with code: {}", exit_code),
-            if exit_code == 0 { LogLevel::Info } else { LogLevel::Error }
-        );
-        log_and_emit(&window, &mut logs, status_msg.clone());
-
-        if exit_code != 0 {
-            success = false;
-            return Ok(BuildResult {
-                result: format!("Build failed with exit code: {}", exit_code),
-                logs,
-                stages,
-                success
-            });
-        }
-
-        // Add build results check
-        time::sleep(Duration::from_secs(2)).await;
-
-        // Check build directory contents
-        stages.push(format!("Checking build directory contents for combination {:?}", combination));
-        let build_dir_name = build_config.config_name.as_deref().unwrap_or("Debug");
-        let build_dir = project_path.join(build_dir_name);
-        let expected_bin_file = build_dir.join(format!("{}.bin", project_name.to_lowercase()));
-        if !build_dir.exists() || !expected_bin_file.exists() {
-            let msg = log_with_timestamp(&format!("Error: Output file '{}.bin' not found in '{}'", project_name.to_lowercase(), build_dir.display()), LogLevel::Error);
-            log_and_emit(&window, &mut logs, msg.clone());
-            success = false;
-            return Ok(BuildResult { result: msg, logs, stages, success });
-        }
-
-        // Check file size
-        if let Ok(metadata) = fs::metadata(&expected_bin_file) {
-            let msg = log_with_timestamp(
-                &format!("Output file size: {} bytes", metadata.len()),
-                LogLevel::Info
-            );
-            log_and_emit(&window, &mut logs, msg.clone());
-        } else {
-            let msg = log_with_timestamp(
-                &format!("Failed to get output file metadata: {}", expected_bin_file.display()),
-                LogLevel::Error
-            );
-            log_and_emit(&window, &mut logs, msg.clone());
-            success = false;
-            return Ok(BuildResult { result: msg, logs, stages, success });
-        }
-
-        // Rename bin file
-        stages.push(format!("Renaming output file for combination {:?}", combination));
-        if let Err(e) = fs::rename(&expected_bin_file, &bin_dst) {
-            let msg = log_with_timestamp(&format!("Error moving '{}': {}", expected_bin_file.display(), e), LogLevel::Error);
-            log_and_emit(&window, &mut logs, msg.clone());
-            success = false;
-            return Ok(BuildResult { result: msg, logs, stages, success });
+        // ...existing code...
+        {
+            let mut child_guard = BUILD_CHILD.lock().await;
+            *child_guard = None;
         }
     }
 

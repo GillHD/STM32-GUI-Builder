@@ -1,13 +1,9 @@
 <template>
   <div v-if="props.status !== 'idle'" class="space-y-2">
+    <!-- Changed condition to only show spinner during building -->
     <div v-if="props.status === 'building'" class="flex flex-col items-center justify-center space-y-2">
       <div class="flex items-center">
-        <svg
-          class="animate-spin h-5 w-5 text-blue-600"
-          xmlns="http://www.w3.org/2000/svg"
-          fill="none"
-          viewBox="0 0 24 24"
-        >
+        <svg class="h-5 w-5 animate-spin text-blue-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
           <circle
             class="opacity-25"
             cx="12"
@@ -22,7 +18,9 @@
             d="M4 12a8 8 0 018-8v8H4z"
           ></path>
         </svg>
-        <span class="ml-2 text-sm text-gray-600">{{ props.currentStdout || 'Current Build Output...' }}</span>
+        <span class="ml-2 text-sm text-blue-600">
+          {{ props.currentStdout || 'Current Build Output...' }}
+        </span>
       </div>
     </div>
     <div class="flex justify-end">

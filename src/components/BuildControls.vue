@@ -2,10 +2,10 @@
   <div class="pt-4 flex space-x-4">
     <button
       @click="$emit('build')"
-      :disabled="status === 'building' || isCancelling"
+      :disabled="isDisabled"
       class="flex-1 py-2 px-4 bg-green-600 hover:bg-green-700 text-white rounded-lg transition disabled:bg-gray-400 disabled:cursor-not-allowed"
     >
-      {{ status === 'building' ? 'Building...' : 'Build Project' }}
+      {{ buttonText }}
     </button>
     <button
       v-if="status === 'building'"
@@ -19,7 +19,7 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, onUnmounted } from 'vue';
+import { computed, onMounted, onUnmounted } from 'vue';
 import type { BuildStatusType } from '../types/index';
 
 const props = defineProps<{
@@ -28,6 +28,17 @@ const props = defineProps<{
 }>();
 
 const emit = defineEmits(['build', 'cancel']);
+
+const isDisabled = computed(() => 
+  props.status === 'building' || 
+  props.isCancelling
+); // Removed status === 'cancelled' check
+
+const buttonText = computed(() => {
+  if (props.status === 'building') return 'Building...';
+  if (props.isCancelling) return 'Cancelling...';
+  return 'Build Project';
+}); 
 
 const confirmCancel = () => {
   if (window.confirm('Are you sure you want to cancel the build?')) {

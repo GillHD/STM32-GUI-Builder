@@ -2,10 +2,13 @@ use crate::models::BuildConfig;
 use crate::utils::{log_with_timestamp, LogLevel};
 use sysinfo::{Pid, System, ProcessesToUpdate};
 use tauri::{command, Window, Emitter};
-use tokio::sync::Mutex;
+use tokio::sync::{Mutex, Notify};
 use tokio::time::{self, Duration};
 use std::process::Command;
+use tokio::process::Child;
 use lazy_static::lazy_static;
+use winapi::um::wincon::GenerateConsoleCtrlEvent;
+use std::sync::Arc;
 
 #[cfg(windows)]
 use std::os::windows::process::CommandExt;
@@ -19,6 +22,8 @@ const CREATE_NO_WINDOW: u32 = 0x08000000;
 // Define BUILD_CONFIG as a static Mutex
 lazy_static! {
     pub static ref BUILD_CONFIG: Mutex<Option<BuildConfig>> = Mutex::new(None);
+    pub static ref BUILD_CHILD: Mutex<Option<Child>> = Mutex::new(None); // Новый глобальный процесс
+    pub static ref BUILD_CANCEL_NOTIFY: Arc<Notify> = Arc::new(Notify::new()); // Add this line
 }
 
 #[command]
@@ -30,22 +35,8 @@ pub async fn kill_process_and_children(
     let mut system = System::new_all();
     system.refresh_all();
 
-    // Check if process is STM32CubeIDE or java
-    if let Some(process) = system.process(Pid::from(pid as usize)) {
-        let process_name = process.name().to_str();
-
-        if !process_name.map_or(false, |name| name.contains("stm32cubeide") || name.contains("java")) {
-            let name_display = process_name.unwrap_or("<unknown>");
-            let msg = log_with_timestamp(
-                &format!("Process PID {} is not an STM32CubeIDE process (name: {})", pid, name_display),
-                LogLevel::Error,
-            );
-            logs.push(msg.clone());
-            window.emit("build-log", &msg).ok();
-            return Err(msg);
-        }
-
-    } else {
+    // Проверяем только, что процесс существует (убираем фильтр по имени)
+    if system.process(Pid::from(pid as usize)).is_none() {
         let msg = log_with_timestamp(
             &format!("Process with PID {} not found", pid),
             LogLevel::Error,
@@ -293,6 +284,7 @@ pub async fn kill_process_and_children(
         window.emit("build-log", &msg).ok();
 
         for child_pid in children {
+            // Рекурсивно убиваем всех потомков, независимо от имени
             let child_result = Box::pin(kill_process_and_children(
                 Into::<usize>::into(child_pid) as u32,
                 window.clone(),
@@ -315,5 +307,76 @@ pub async fn kill_process_and_children(
     );
     logs.push(final_msg.clone());
     window.emit("build-log", &final_msg).ok();
+    Ok(())
+}
+
+// Новый метод для завершения процесса по handle:
+#[command]
+pub async fn kill_build_child_process() -> Result<(), String> {
+    // Use a timeout for the lock acquisition
+    let mut child_guard = match tokio::time::timeout(
+        Duration::from_secs(1),
+        BUILD_CHILD.lock()
+    ).await {
+        Ok(guard) => guard,
+        Err(_) => return Ok(()) // Return OK if we can't get lock
+    };
+
+    if let Some(child) = child_guard.as_mut() {
+        println!("[KILL] Found active build process");
+
+        #[cfg(windows)]
+        {
+            // Run taskkill in a separate task to avoid blocking
+            let kill_task = tokio::spawn(async {
+                Command::new("taskkill")
+                    .args(&["/F", "/T", "/IM", "stm32cubeidec.exe"])
+                    .creation_flags(CREATE_NO_WINDOW)
+                    .output()
+            });
+
+            // Wait for taskkill with timeout
+            match tokio::time::timeout(Duration::from_secs(2), kill_task).await {
+                Ok(result) => match result {
+                    Ok(output) => if let Ok(output) = output {
+                        println!("[KILL] taskkill result: {}", output.status.success());
+                    },
+                    Err(e) => println!("[KILL] taskkill task failed: {}", e),
+                },
+                Err(_) => println!("[KILL] taskkill timeout"),
+            }
+
+            // Kill child process without waiting
+            let _ = child.kill().await;
+            println!("[KILL] Child process kill signal sent");
+
+            // Force drop the handle
+            drop(child);
+            *child_guard = None;
+            println!("[KILL] Process handle released");
+        }
+
+        #[cfg(unix)]
+        {
+            // On Unix, send SIGTERM to process group
+            use nix::sys::signal::{self, Signal};
+            use nix::unistd::Pid;
+            
+            let pid = Pid::from_raw(-(child.id().unwrap_or(0) as i32));
+            if let Err(e) = signal::kill(pid, Signal::SIGTERM) {
+                // Fallback to regular process kill
+                if let Err(e2) = child.kill().await {
+                    return Err(format!(
+                        "Failed to kill process group ({}), and process kill failed: {}", 
+                        e, e2
+                    ));
+                }
+            }
+            *child_guard = None;
+            return Ok(());
+        }
+    } else {
+        println!("[KILL] No active build process found");
+    }
     Ok(())
 }

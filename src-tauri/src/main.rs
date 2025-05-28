@@ -12,6 +12,7 @@ mod process;
 mod utils;
 mod build_combinations;
 mod build_config_gen;
+mod logging;
 
 fn main() {
     tauri::Builder::default()

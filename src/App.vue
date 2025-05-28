@@ -135,26 +135,15 @@ onMounted(async () => {
     console.log('Loaded build settings:', buildSettings.value);
   } catch (e) {
     console.error('Failed to load build settings:', e);
-    buildLogs.value.push(`[${formatTimestamp()}] Failed to load build settings: ${e}`);
+    // Удалить добавление времени и уровня на фронте:
+    buildLogs.value.push(`Failed to load build settings: ${e}`);
   }
 
   // Set up build-log listener
   unsubscribe = await listen('build-log', (event) => {
     const eventText = String(event.payload);
-    if (eventText.startsWith('stdout:')) {
-      const stdoutLine = eventText.substring(7).trim();
-      currentStdout.value = stdoutLine;
-      if (stdoutLine) {
-        buildLogs.value.push(`[${formatTimestamp()}] ${stdoutLine}`);
-      }
-    } else if (eventText.startsWith('stderr:')) {
-      const stderrLine = eventText.substring(7).trim();
-      if (stderrLine) {
-        buildLogs.value.push(`[${formatTimestamp()}] [ERROR] ${stderrLine}`);
-      }
-    } else {
-      buildLogs.value.push(`[${formatTimestamp()}] ${eventText}`);
-    }
+    // Не добавлять timestamp и уровень на фронте, просто пушим как есть:
+    buildLogs.value.push(eventText);
   });
 
   if (logContainerRef.value && 'logContainer' in logContainerRef.value) {

@@ -1,5 +1,6 @@
 use crate::models::BuildConfig;
-use crate::utils::{log_with_timestamp, LogLevel};
+use crate::utils::{LogLevel};
+use crate::logging::Logger;
 use sysinfo::{Pid, System, ProcessesToUpdate};
 use tauri::{command, Window, Emitter};
 use tokio::sync::{Mutex, Notify};
@@ -31,28 +32,16 @@ pub async fn kill_process_and_children(
     pid: u32,
     window: Window,
 ) -> Result<(), String> {
-    let mut logs = Vec::new();
+    let mut logger = Logger::new(&window);
     let mut system = System::new_all();
     system.refresh_all();
 
-    // Проверяем только, что процесс существует (убираем фильтр по имени)
     if system.process(Pid::from(pid as usize)).is_none() {
-        let msg = log_with_timestamp(
-            &format!("Process with PID {} not found", pid),
-            LogLevel::Error,
-        );
-        logs.push(msg.clone());
-        window.emit("build-log", &msg).ok();
+        let msg = logger.error(&format!("Process with PID {} not found", pid));
         return Err(msg);
     }
 
-    // Attempt soft process termination
-    let soft_termination_msg = log_with_timestamp(
-        &format!("Attempting soft termination for PID {}", pid),
-        LogLevel::Info,
-    );
-    logs.push(soft_termination_msg.clone());
-    window.emit("build-log", &soft_termination_msg).ok();
+    logger.info(&format!("Attempting soft termination for PID {}", pid));
 
     #[cfg(windows)]
     {
@@ -63,32 +52,17 @@ pub async fn kill_process_and_children(
 
         match taskkill_soft {
             Ok(output) if output.status.success() => {
-                let msg = log_with_timestamp(
-                    &format!("Soft termination successful for PID {}", pid),
-                    LogLevel::Info,
-                );
-                logs.push(msg.clone());
-                window.emit("build-log", &msg).ok();
+                logger.info(&format!("Soft termination successful for PID {}", pid));
             }
             Ok(output) => {
-                let msg = log_with_timestamp(
-                    &format!(
-                        "Soft termination failed for PID {}: {}",
-                        pid,
-                        String::from_utf8_lossy(&output.stderr)
-                    ),
-                    LogLevel::Error,
-                );
-                logs.push(msg.clone());
-                window.emit("build-log", &msg).ok();
+                logger.error(&format!(
+                    "Soft termination failed for PID {}: {}",
+                    pid,
+                    String::from_utf8_lossy(&output.stderr)
+                ));
             }
             Err(e) => {
-                let msg = log_with_timestamp(
-                    &format!("Error during soft termination for PID {}: {}", pid, e),
-                    LogLevel::Error,
-                );
-                logs.push(msg.clone());
-                window.emit("build-log", &msg).ok();
+                logger.error(&format!("Error during soft termination for PID {}: {}", pid, e));
             }
         }
     }
@@ -102,32 +76,17 @@ pub async fn kill_process_and_children(
 
         match kill_soft {
             Ok(output) if output.status.success() => {
-                let msg = log_with_timestamp(
-                    &format!("Soft termination successful for PID {}", pid),
-                    LogLevel::Info,
-                );
-                logs.push(msg.clone());
-                window.emit("build-log", &msg).ok();
+                logger.info(&format!("Soft termination successful for PID {}", pid));
             }
             Ok(output) => {
-                let msg = log_with_timestamp(
-                    &format!(
-                        "Soft termination failed for PID {}: {}",
-                        pid,
-                        String::from_utf8_lossy(&output.stderr)
-                    ),
-                    LogLevel::Error,
-                );
-                logs.push(msg.clone());
-                window.emit("build-log", &msg).ok();
+                logger.error(&format!(
+                    "Soft termination failed for PID {}: {}",
+                    pid,
+                    String::from_utf8_lossy(&output.stderr)
+                ));
             }
             Err(e) => {
-                let msg = log_with_timestamp(
-                    &format!("Error during soft termination for PID {}: {}", pid, e),
-                    LogLevel::Error,
-                );
-                logs.push(msg.clone());
-                window.emit("build-log", &msg).ok();
+                logger.error(&format!("Error during soft termination for PID {}: {}", pid, e));
             }
         }
     }
@@ -141,32 +100,17 @@ pub async fn kill_process_and_children(
 
         match kill_soft {
             Ok(output) if output.status.success() => {
-                let msg = log_with_timestamp(
-                    &format!("Soft termination successful for PID {}", pid),
-                    LogLevel::Info,
-                );
-                logs.push(msg.clone());
-                window.emit("build-log", &msg).ok();
+                logger.info(&format!("Soft termination successful for PID {}", pid));
             }
             Ok(output) => {
-                let msg = log_with_timestamp(
-                    &format!(
-                        "Soft termination failed for PID {}: {}",
-                        pid,
-                        String::from_utf8_lossy(&output.stderr)
-                    ),
-                    LogLevel::Error,
-                );
-                logs.push(msg.clone());
-                window.emit("build-log", &msg).ok();
+                logger.error(&format!(
+                    "Soft termination failed for PID {}: {}",
+                    pid,
+                    String::from_utf8_lossy(&output.stderr)
+                ));
             }
             Err(e) => {
-                let msg = log_with_timestamp(
-                    &format!("Error during soft termination for PID {}: {}", pid, e),
-                    LogLevel::Error,
-                );
-                logs.push(msg.clone());
-                window.emit("build-log", &msg).ok();
+                logger.error(&format!("Error during soft termination for PID {}: {}", pid, e));
             }
         }
     }
@@ -177,12 +121,7 @@ pub async fn kill_process_and_children(
     // Check if process has terminated
     system.refresh_processes(ProcessesToUpdate::All, true);
     if system.process(Pid::from(pid as usize)).is_some() {
-        let msg = log_with_timestamp(
-            &format!("Process PID {} still running, attempting force kill", pid),
-            LogLevel::Info,
-        );
-        logs.push(msg.clone());
-        window.emit("build-log", &msg).ok();
+        logger.info(&format!("Process PID {} still running, attempting force kill", pid));
 
         #[cfg(windows)]
         {
@@ -193,33 +132,18 @@ pub async fn kill_process_and_children(
 
             match taskkill_force {
                 Ok(output) if output.status.success() => {
-                    let msg = log_with_timestamp(
-                        &format!("Force termination successful for PID {}", pid),
-                        LogLevel::Info,
-                    );
-                    logs.push(msg.clone());
-                    window.emit("build-log", &msg).ok();
+                    logger.info(&format!("Force termination successful for PID {}", pid));
                 }
                 Ok(output) => {
-                    let msg = log_with_timestamp(
-                        &format!(
-                            "Force termination failed for PID {}: {}",
-                            pid,
-                            String::from_utf8_lossy(&output.stderr)
-                        ),
-                        LogLevel::Error,
-                    );
-                    logs.push(msg.clone());
-                    window.emit("build-log", &msg).ok();
+                    let msg = logger.error(&format!(
+                        "Force termination failed for PID {}: {}",
+                        pid,
+                        String::from_utf8_lossy(&output.stderr)
+                    ));
                     return Err(msg);
                 }
                 Err(e) => {
-                    let msg = log_with_timestamp(
-                        &format!("Error during force termination for PID {}: {}", pid, e),
-                        LogLevel::Error,
-                    );
-                    logs.push(msg.clone());
-                    window.emit("build-log", &msg).ok();
+                    let msg = logger.error(&format!("Error during force termination for PID {}: {}", pid, e));
                     return Err(msg);
                 }
             }
@@ -233,33 +157,18 @@ pub async fn kill_process_and_children(
 
             match kill_force {
                 Ok(output) if output.status.success() => {
-                    let msg = log_with_timestamp(
-                        &format!("Force termination successful for PID {}", pid),
-                        LogLevel::Info,
-                    );
-                    logs.push(msg.clone());
-                    window.emit("build-log", &msg).ok();
+                    logger.info(&format!("Force termination successful for PID {}", pid));
                 }
                 Ok(output) => {
-                    let msg = log_with_timestamp(
-                        &format!(
-                            "Force termination failed for PID {}: {}",
-                            pid,
-                            String::from_utf8_lossy(&output.stderr)
-                        ),
-                        LogLevel::Error,
-                    );
-                    logs.push(msg.clone());
-                    window.emit("build-log", &msg).ok();
+                    let msg = logger.error(&format!(
+                        "Force termination failed for PID {}: {}",
+                        pid,
+                        String::from_utf8_lossy(&output.stderr)
+                    ));
                     return Err(msg);
                 }
                 Err(e) => {
-                    let msg = log_with_timestamp(
-                        &format!("Error during force termination for PID {}: {}", pid, e),
-                        LogLevel::Error,
-                    );
-                    logs.push(msg.clone());
-                    window.emit("build-log", &msg).ok();
+                    let msg = logger.error(&format!("Error during force termination for PID {}: {}", pid, e));
                     return Err(msg);
                 }
             }
@@ -276,12 +185,7 @@ pub async fn kill_process_and_children(
         .collect();
 
     if !children.is_empty() {
-        let msg = log_with_timestamp(
-            &format!("Found {} child processes for PID {}", children.len(), pid),
-            LogLevel::Info,
-        );
-        logs.push(msg.clone());
-        window.emit("build-log", &msg).ok();
+        logger.info(&format!("Found {} child processes for PID {}", children.len(), pid));
 
         for child_pid in children {
             // Рекурсивно убиваем всех потомков, независимо от имени
@@ -290,23 +194,13 @@ pub async fn kill_process_and_children(
                 window.clone(),
             )).await;
             if let Err(e) = child_result {
-                let msg = log_with_timestamp(
-                    &format!("Failed to kill child PID {}: {}", child_pid, e),
-                    LogLevel::Error,
-                );
-                logs.push(msg.clone());
-                window.emit("build-log", &msg).ok();
+                let msg = logger.error(&format!("Failed to kill child PID {}: {}", child_pid, e));
                 return Err(msg);
             }
         }
     }
 
-    let final_msg = log_with_timestamp(
-        &format!("Successfully terminated PID {} and its children", pid),
-        LogLevel::Info,
-    );
-    logs.push(final_msg.clone());
-    window.emit("build-log", &final_msg).ok();
+    logger.info(&format!("Successfully terminated PID {} and its children", pid));
     Ok(())
 }
 
@@ -358,7 +252,6 @@ pub async fn kill_build_child_process() -> Result<(), String> {
 
         #[cfg(unix)]
         {
-            // On Unix, send SIGTERM to process group
             use nix::sys::signal::{self, Signal};
             use nix::unistd::Pid;
             

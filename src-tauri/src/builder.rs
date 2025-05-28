@@ -3,8 +3,9 @@ use crate::{
     build_config_gen::generate_build_config_h,
     models::{BuildConfig, BuildResult},
     process::{BUILD_CANCEL_NOTIFY, BUILD_CONFIG, BUILD_CHILD},
-    utils::{log_with_timestamp, get_project_name, get_cproject_configurations, LogLevel, validate_project_file, validate_cproject_file},
-    config::{BuildSettingsConfig, parse_range_string, load_build_settings_schema}
+    utils::{/* log_with_timestamp, */ get_project_name, get_cproject_configurations, LogLevel, validate_project_file, validate_cproject_file},
+    config::{BuildSettingsConfig, parse_range_string, load_build_settings_schema},
+    logging::Logger
 };
 use serde_json;
 use std::fs::{self, File};
@@ -25,14 +26,9 @@ fn format_setting_message(setting_id: &str, value: &serde_json::Value) -> String
     format!("Setting '{}' with value '{}'", setting_id, value)
 }
 
-fn log_and_emit(window: &Window, logs: &mut Vec<String>, msg: String) {
-    logs.push(msg.clone());
-    window.emit("build-log", &msg).ok();
-}
-
 #[command]
 pub async fn build_project(window: Window, config: BuildConfig) -> Result<BuildResult, tauri::Error> {
-    let mut logs = Vec::new();
+    let mut logger = Logger::new(&window);
     let mut stages = Vec::new();
     let mut success = true;
 
@@ -40,51 +36,49 @@ pub async fn build_project(window: Window, config: BuildConfig) -> Result<BuildR
     let settings_config = match BuildSettingsConfig::load() {
         Ok(cfg) => cfg,
         Err(e) => {
-            let msg = log_with_timestamp(&format!("Configuration error: {}", e), LogLevel::Error);
-            log_and_emit(&window, &mut logs, msg.clone());
-            return Ok(BuildResult { result: msg, logs, stages, success: false });
+            let msg = logger.error(&format!("Configuration error: {}", e));
+            return Ok(BuildResult { 
+                result: msg, 
+                logs: logger.get_logs().clone(), 
+                stages, 
+                success: false 
+            });
         }
     };
 
     // Log all settings from frontend
-    let settings_json = serde_json::to_string_pretty(&config.settings).unwrap_or_else(|_| "<failed to serialize settings>".to_string());
-    let msg = log_with_timestamp(&format!("Received settings from frontend:\n{}", settings_json), LogLevel::Debug);
-    log_and_emit(&window, &mut logs, msg.clone());
+    let settings_json = serde_json::to_string_pretty(&config.settings)
+        .unwrap_or_else(|_| "<failed to serialize settings>".to_string());
+    logger.debug(&format!("Received settings from frontend:\n{}", settings_json));
 
     // Log build_settings from schema
-    let build_settings_json = serde_json::to_string_pretty(&settings_config.build_settings).unwrap_or_else(|_| "<failed to serialize build_settings>".to_string());
-    let msg = log_with_timestamp(&format!("Loaded build_settings schema:\n{}", build_settings_json), LogLevel::Debug);
-    log_and_emit(&window, &mut logs, msg.clone());
+    let build_settings_json = serde_json::to_string_pretty(&settings_config.build_settings)
+        .unwrap_or_else(|_| "<failed to serialize build_settings>".to_string());
+    logger.debug(&format!("Loaded build_settings schema:\n{}", build_settings_json));
 
     // Validate all settings
     for setting in &settings_config.build_settings {
         if let Some(value) = config.settings.get(&setting.id) {
-            let msg = log_with_timestamp(&format!("{}", format_setting_message(&setting.id, value)), LogLevel::Debug);
-            log_and_emit(&window, &mut logs, msg.clone());
+            let msg = logger.debug(&format!("{}", format_setting_message(&setting.id, value)));
 
             // Explicitly log if array is empty (for checkbox_group/range)
             if (setting.field_type == "checkbox_group" || setting.field_type == "range")
                 && value.is_array() && value.as_array().map(|arr| arr.is_empty()).unwrap_or(false)
             {
-                let warn_msg = log_with_timestamp(
-                    &format!("Warning: Setting '{}' is an empty array (may be optional or missing selection)", setting.id),
-                    LogLevel::Debug
+                let warn_msg = logger.warning(
+                    &format!("Setting '{}' is an empty array (may be optional or missing selection)", setting.id)
                 );
-                log_and_emit(&window, &mut logs, warn_msg.clone());
             }
 
             if let Err(e) = settings_config.validate_setting(&setting.id, value) {
-                let msg = log_with_timestamp(&format!("Validation error for {}: {}", setting.id, e), LogLevel::Error);
-                log_and_emit(&window, &mut logs, msg.clone());
-                return Ok(BuildResult { result: msg, logs, stages, success: false });
+                let msg = logger.error(&format!("Validation error for {}: {}", setting.id, e));
+                return Ok(BuildResult { result: msg, logs: logger.get_logs().clone(), stages, success: false });
             }
         } else {
             // Explicitly log missing value for parameter
-            let warn_msg = log_with_timestamp(
-                &format!("Warning: Setting '{}' is missing in settings object", setting.id),
-                LogLevel::Debug
+            let warn_msg = logger.warning(
+                &format!("Setting '{}' is missing in settings object", setting.id)
             );
-            log_and_emit(&window, &mut logs, warn_msg.clone());
         }
     }
 
@@ -92,36 +86,31 @@ pub async fn build_project(window: Window, config: BuildConfig) -> Result<BuildR
     let _schema = match load_build_settings_schema().await {
         Ok(s) => s,
         Err(e) => {
-            let msg = log_with_timestamp(&format!("Build settings schema error: {}", e), LogLevel::Error);
-            log_and_emit(&window, &mut logs, msg.clone());
-            return Ok(BuildResult { result: msg, logs, stages, success: false });
+            let msg = logger.error(&format!("Build settings schema error: {}", e));
+            return Ok(BuildResult { result: msg, logs: logger.get_logs().clone(), stages, success: false });
         }
     };
 
     // Check required paths
     if config.project_path.trim().is_empty() || config.build_dir.trim().is_empty() ||
        config.cube_ide_exe_path.trim().is_empty() || config.workspace_path.trim().is_empty() {
-        let msg = log_with_timestamp("One or more required paths are empty in BuildConfig", LogLevel::Error);
-        log_and_emit(&window, &mut logs, msg.clone());
-        return Ok(BuildResult { result: msg, logs, stages, success: false });
+        let msg = logger.error("One or more required paths are empty in BuildConfig");
+        return Ok(BuildResult { result: msg, logs: logger.get_logs().clone(), stages, success: false });
     }
 
     // Just copy string, without ok_or_else
     let workspace_path = config.workspace_path.clone();
     let workspace_dir = Path::new(&workspace_path).canonicalize()
         .map_err(|e| {
-            let msg = log_with_timestamp(&format!("Invalid workspace path '{}': {}", workspace_path, e), LogLevel::Error);
-            log_and_emit(&window, &mut logs, msg.clone());
+            let msg = logger.error(&format!("Invalid workspace path '{}': {}", workspace_path, e));
             tauri::Error::from(anyhow::anyhow!(msg))
         })?;
-    logs.push(log_with_timestamp(&format!("Using workspace: {}", workspace_path), LogLevel::Info));
-    window.emit("build-log", &logs.last().unwrap()).ok();
+    logger.info(&format!("Using workspace: {}", workspace_path));
 
     // Check if working directory exists
     if !workspace_dir.exists() || !workspace_dir.is_dir() {
-        let msg = log_with_timestamp(&format!("Error: Workspace '{}' does not exist", workspace_path), LogLevel::Error);
-        log_and_emit(&window, &mut logs, msg.clone());
-        return Ok(BuildResult { result: msg, logs, stages, success: false });
+        let msg = logger.error(&format!("Error: Workspace '{}' does not exist", workspace_path));
+        return Ok(BuildResult { result: msg, logs: logger.get_logs().clone(), stages, success: false });
     }
 
     // Clone and update build configuration
@@ -130,49 +119,41 @@ pub async fn build_project(window: Window, config: BuildConfig) -> Result<BuildR
     {
         let mut config_guard = BUILD_CONFIG.lock().await;
         *config_guard = Some(build_config.clone());
-        logs.push(log_with_timestamp("Build configuration saved in BUILD_CONFIG", LogLevel::Debug));
-        window.emit("build-log", &logs.last().unwrap()).ok();
+        logger.debug("Build configuration saved in BUILD_CONFIG");
     }
 
     // Check cancellation
     if build_config.cancelled.unwrap_or(false) {
-        let msg = log_with_timestamp("Build was cancelled before starting", LogLevel::Info);
-        log_and_emit(&window, &mut logs, msg.clone());
-        return Ok(BuildResult { result: msg, logs, stages, success: false });
+        let msg = logger.info("Build was cancelled before starting");
+        return Ok(BuildResult { result: msg, logs: logger.get_logs().clone(), stages, success: false });
     }
 
     // Start build process
-    let start_msg = log_with_timestamp("Starting project build", LogLevel::Info);
+    let start_msg = logger.info("Starting project build");
     stages.push(start_msg.clone());
-    logs.push(start_msg.clone());
-    window.emit("build-log", &start_msg).ok();
 
     // Check STM32CubeIDE path
     stages.push("Validating STM32CubeIDE EXE path".to_string());
     let cube_ide_exe = Path::new(&build_config.cube_ide_exe_path).canonicalize()
         .map_err(|e| {
-            let msg = log_with_timestamp(&format!("Invalid STM32CubeIDE path '{}': {}", build_config.cube_ide_exe_path, e), LogLevel::Error);
-            log_and_emit(&window, &mut logs, msg.clone());
+            let msg = logger.error(&format!("Invalid STM32CubeIDE path '{}': {}", build_config.cube_ide_exe_path, e));
             tauri::Error::from(anyhow::anyhow!(msg))
         })?;
     if !cube_ide_exe.exists() || !cube_ide_exe.is_file() {
-        let msg = log_with_timestamp(&format!("Error: STM32CubeIDE EXE '{}' not found", build_config.cube_ide_exe_path), LogLevel::Error);
-        log_and_emit(&window, &mut logs, msg.clone());
-        return Ok(BuildResult { result: msg, logs, stages, success: false });
+        let msg = logger.error(&format!("Error: STM32CubeIDE EXE '{}' not found", build_config.cube_ide_exe_path));
+        return Ok(BuildResult { result: msg, logs: logger.get_logs().clone(), stages, success: false });
     }
 
     // Setup paths
     let project_path = Path::new(&build_config.project_path).canonicalize()
         .map_err(|e| {
-            let msg = log_with_timestamp(&format!("Invalid project path '{}': {}", build_config.project_path, e), LogLevel::Error);
-            log_and_emit(&window, &mut logs, msg.clone());
+            let msg = logger.error(&format!("Invalid project path '{}': {}", build_config.project_path, e));
             tauri::Error::from(anyhow::anyhow!(msg))
         })?;
     let build_config_file = project_path.join("Inc/build_config.h");
     let output_dir = Path::new(&build_config.build_dir).canonicalize()
         .map_err(|e| {
-            let msg = log_with_timestamp(&format!("Invalid build directory '{}': {}", build_config.build_dir, e), LogLevel::Error);
-            log_and_emit(&window, &mut logs, msg.clone());
+            let msg = logger.error(&format!("Invalid build directory '{}': {}", build_config.build_dir, e));
             tauri::Error::from(anyhow::anyhow!(msg))
         })?;
     let log_file_path = output_dir.join("build_log.txt");
@@ -180,14 +161,12 @@ pub async fn build_project(window: Window, config: BuildConfig) -> Result<BuildR
     // Check directories
     stages.push("Checking and creating directories".to_string());
     if !project_path.exists() {
-        let msg = log_with_timestamp(&format!("Error: Project directory '{}' not found", build_config.project_path), LogLevel::Error);
-        log_and_emit(&window, &mut logs, msg.clone());
-        return Ok(BuildResult { result: msg, logs, stages, success: false });
+        let msg = logger.error(&format!("Error: Project directory '{}' not found", build_config.project_path));
+        return Ok(BuildResult { result: msg, logs: logger.get_logs().clone(), stages, success: false });
     }
     if let Err(e) = fs::create_dir_all(&output_dir) {
-        let msg = log_with_timestamp(&format!("Error creating directory '{}': {}", output_dir.display(), e), LogLevel::Error);
-        log_and_emit(&window, &mut logs, msg.clone());
-        return Ok(BuildResult { result: msg, logs, stages, success: false });
+        let msg = logger.error(&format!("Error creating directory '{}': {}", output_dir.display(), e));
+        return Ok(BuildResult { result: msg, logs: logger.get_logs().clone(), stages, success: false });
     }
 
     // Check project files
@@ -198,15 +177,13 @@ pub async fn build_project(window: Window, config: BuildConfig) -> Result<BuildR
     // Check .cproject configurations
     let configs = get_cproject_configurations(&project_path)
         .map_err(|e| {
-            let msg = log_with_timestamp(&format!("Error reading .cproject: {}", e), LogLevel::Error);
-            log_and_emit(&window, &mut logs, msg.clone());
+            let msg = logger.error(&format!("Error reading .cproject: {}", e));
             tauri::Error::from(anyhow::anyhow!(msg))
         })?;
     let expected_config = build_config.config_name.as_deref().unwrap_or("Debug");
     if !configs.contains(&expected_config.to_string()) {
-        let msg = log_with_timestamp(&format!("Error: Configuration '{}' not found in .cproject", expected_config), LogLevel::Error);
-        log_and_emit(&window, &mut logs, msg.clone());
-        return Ok(BuildResult { result: msg, logs, stages, success: false });
+        let msg = logger.error(&format!("Error: Configuration '{}' not found in .cproject", expected_config));
+        return Ok(BuildResult { result: msg, logs: logger.get_logs().clone(), stages, success: false });
     }
 
     // Get project name
@@ -215,8 +192,7 @@ pub async fn build_project(window: Window, config: BuildConfig) -> Result<BuildR
         Some(name) => name,
         None => get_project_name(&project_path)
             .map_err(|e| {
-                let msg = log_with_timestamp(&format!("Error getting project name: {}", e), LogLevel::Error);
-                log_and_emit(&window, &mut logs, msg.clone());
+                let msg = logger.error(&format!("Error getting project name: {}", e));
                 tauri::Error::from(anyhow::anyhow!(msg))
             })?,
     };
@@ -269,11 +245,7 @@ pub async fn build_project(window: Window, config: BuildConfig) -> Result<BuildR
         .map(|(setting, values)| format!("{}: {:?}", setting.id, values))
         .collect::<Vec<_>>()
         .join(", ");
-    let msg = log_with_timestamp(
-        &format!("settings_values for build combinations: {{ {} }}", settings_values_log),
-        LogLevel::Debug
-    );
-    log_and_emit(&window, &mut logs, msg.clone());
+    logger.debug(&format!("settings_values for build combinations: {{ {} }}", settings_values_log));
 
     // Check: if at least one REQUIRED parameter has no values — error
     let missing_required: Vec<String> = settings_config.build_settings.iter()
@@ -318,30 +290,22 @@ pub async fn build_project(window: Window, config: BuildConfig) -> Result<BuildR
             .map(|(setting, values)| format!("{}: {:?}", setting.id, values))
             .collect::<Vec<_>>()
             .join(", ");
-        let debug_msg = log_with_timestamp(
-            &format!("Debug: settings_values = {{ {} }}", debug_settings),
-            LogLevel::Debug
-        );
-        log_and_emit(&window, &mut logs, debug_msg.clone());
+        logger.debug(&format!("Debug: settings_values = {{ {} }}", debug_settings));
 
-        let msg = log_with_timestamp(
-            &format!("No values provided for required build parameters: {}. Please fill all required build settings.", missing_required.join(", ")),
-            LogLevel::Error
+        let msg = logger.error(
+            &format!("No values provided for required build parameters: {}. Please fill all required build settings.", missing_required.join(", "))
         );
-        log_and_emit(&window, &mut logs, msg.clone());
-        return Ok(BuildResult { result: msg, logs, stages, success: false });
+        return Ok(BuildResult { result: msg, logs: logger.get_logs().clone(), stages, success: false });
     }
 
     // Create combinations for build (detailed logging)
     let build_combinations = generate_build_combinations(&settings_config, &config.settings);
 
     if build_combinations.is_empty() {
-        let msg = log_with_timestamp(
-            "No build combinations generated. This usually means at least one build parameter has no values. Check settings_values and build_settings.",
-            LogLevel::Error
+        let msg = logger.error(
+            "No build combinations generated. This usually means at least one build parameter has no values. Check settings_values and build_settings."
         );
-        log_and_emit(&window, &mut logs, msg.clone());
-        return Ok(BuildResult { result: msg, logs, stages, success: false });
+        return Ok(BuildResult { result: msg, logs: logger.get_logs().clone(), stages, success: false });
     }
 
     let mut any_build_executed = false;
@@ -354,10 +318,9 @@ pub async fn build_project(window: Window, config: BuildConfig) -> Result<BuildR
             let config_guard = BUILD_CONFIG.lock().await;
             if let Some(conf) = &*config_guard {
                 if conf.cancelled.unwrap_or(false) {
-                    let msg = log_with_timestamp(&format!("Build cancelled for combination {:?}", combination), LogLevel::Info);
-                    log_and_emit(&window, &mut logs, msg.clone());
+                    let msg = logger.info(&format!("Build cancelled for combination {:?}", combination));
                     success = false;
-                    return Ok(BuildResult { result: msg, logs, stages, success });
+                    return Ok(BuildResult { result: msg, logs: logger.get_logs().clone(), stages, success });
                 }
             }
         }
@@ -376,10 +339,9 @@ pub async fn build_project(window: Window, config: BuildConfig) -> Result<BuildR
         let combo_dir = output_dir.join(combo_dir_name.trim_end_matches('_'));
         
         if let Err(e) = fs::create_dir_all(&combo_dir) {
-            let msg = log_with_timestamp(&format!("Error creating directory '{}': {}", combo_dir.display(), e), LogLevel::Error);
-            log_and_emit(&window, &mut logs, msg.clone());
+            let msg = logger.error(&format!("Error creating directory '{}': {}", combo_dir.display(), e));
             success = false;
-            return Ok(BuildResult { result: msg, logs, stages, success });
+            return Ok(BuildResult { result: msg, logs: logger.get_logs().clone(), stages, success });
         }
 
         // Create file names
@@ -420,10 +382,9 @@ pub async fn build_project(window: Window, config: BuildConfig) -> Result<BuildR
         stages.push(format!("Checking and removing existing .bin file for combination {:?}", combination));
         if bin_dst.exists() {
             if let Err(e) = fs::remove_file(&bin_dst) {
-                let msg = log_with_timestamp(&format!("Error removing existing file '{}': {}", bin_dst.display(), e), LogLevel::Error);
-                log_and_emit(&window, &mut logs, msg.clone());
+                let msg = logger.error(&format!("Error removing existing file '{}': {}", bin_dst.display(), e));
                 success = false;
-                return Ok(BuildResult { result: msg, logs, stages, success });
+                return Ok(BuildResult { result: msg, logs: logger.get_logs().clone(), stages, success });
             }
         }
 
@@ -435,19 +396,17 @@ pub async fn build_project(window: Window, config: BuildConfig) -> Result<BuildR
         // Create Inc folder
         if let Some(parent) = build_config_file.parent() {
             if let Err(e) = fs::create_dir_all(parent) {
-                let msg = log_with_timestamp(&format!("Error creating directory '{}': {}", parent.display(), e), LogLevel::Error);
-                log_and_emit(&window, &mut logs, msg.clone());
+                let msg = logger.error(&format!("Error creating directory '{}': {}", parent.display(), e));
                 success = false;
-                return Ok(BuildResult { result: msg, logs, stages, success });
+                return Ok(BuildResult { result: msg, logs: logger.get_logs().clone(), stages, success });
             }
         }
 
         // Write build_config.h
         if let Err(e) = File::create(&build_config_file).and_then(|mut f| f.write_all(build_config_content.as_bytes())) {
-            let msg = log_with_timestamp(&format!("Error writing '{}': {}", build_config_file.display(), e), LogLevel::Error);
-            log_and_emit(&window, &mut logs, msg.clone());
+            let msg = logger.error(&format!("Error writing '{}': {}", build_config_file.display(), e));
             success = false;
-            return Ok(BuildResult { result: msg, logs, stages, success });
+            return Ok(BuildResult { result: msg, logs: logger.get_logs().clone(), stages, success });
         }
 
         // Run STM32CubeIDE
@@ -472,7 +431,7 @@ pub async fn build_project(window: Window, config: BuildConfig) -> Result<BuildR
         }
 
         // Add command logging (output as string, not array)
-        let msg = log_with_timestamp(
+        let msg = logger.info(
             &format!(
                 "Executing command: {} {}",
                 &build_config.cube_ide_exe_path,
@@ -484,10 +443,8 @@ pub async fn build_project(window: Window, config: BuildConfig) -> Result<BuildR
                     })
                     .collect::<Vec<_>>()
                     .join(" ")
-            ),
-            LogLevel::Info
+            )
         );
-        log_and_emit(&window, &mut logs, msg.clone());
 
         let mut command = Command::new(&build_config.cube_ide_exe_path);
         command
@@ -522,8 +479,7 @@ pub async fn build_project(window: Window, config: BuildConfig) -> Result<BuildR
         }
 
         let child = command.spawn().map_err(|e| {
-            let msg = log_with_timestamp(&format!("Failed to start STM32CubeIDE process: {}", e), LogLevel::Error);
-            log_and_emit(&window, &mut logs, msg.clone());
+            let msg = logger.error(&format!("Failed to start STM32CubeIDE process: {}", e));
             tauri::Error::from(anyhow::anyhow!(msg))
         })?;
 
@@ -543,26 +499,29 @@ pub async fn build_project(window: Window, config: BuildConfig) -> Result<BuildR
         let stderr = child_ref.stderr.take().expect("Failed to capture stderr");
 
         use tokio::io::{AsyncBufReadExt, BufReader};
-        let _window_clone = window.clone();
-        let stdout_task = tokio::spawn(async move {
-            let reader = BufReader::new(stdout);
-            let mut lines = reader.lines();
-            let mut stdout_lines = Vec::new();
-            while let Ok(Some(line)) = lines.next_line().await {
-                let log = format!("[STDOUT] {}", line.trim());
-                stdout_lines.push(log.clone());
-            }
-            Ok::<Vec<String>, std::io::Error>(stdout_lines)
-        });
+        let window_clone = window.clone();
+        let stdout_task = {
+            // Не используем logger и не добавляем timestamp, просто собираем строки для файла
+            tokio::spawn(async move {
+                let reader = BufReader::new(stdout);
+                let mut lines = reader.lines();
+                let mut stdout_lines = Vec::new();
+                while let Ok(Some(line)) = lines.next_line().await {
+                    stdout_lines.push(line);
+                }
+                Ok::<Vec<String>, std::io::Error>(stdout_lines)
+            })
+        };
 
-        let _window_clone = window.clone();
+        let stderr_window_clone = window.clone();
         let stderr_task = tokio::spawn(async move {
             let reader = BufReader::new(stderr);
             let mut lines = reader.lines();
             let mut stderr_lines = Vec::new();
             while let Ok(Some(line)) = lines.next_line().await {
+                // Не добавляем timestamp, просто пишем в файл
                 let log = format!("[STDERR] {}", line.trim());
-                stderr_lines.push(log.clone());
+                stderr_lines.push(log);
             }
             Ok::<Vec<String>, std::io::Error>(stderr_lines)
         });
@@ -574,20 +533,17 @@ pub async fn build_project(window: Window, config: BuildConfig) -> Result<BuildR
         tokio::select! {
             status = child_wait => {
                 let status = status.map_err(|e| {
-                    let msg = log_with_timestamp(&format!("Process wait failed: {}", e), LogLevel::Error);
-                    log_and_emit(&window, &mut logs, msg.clone());
+                    let msg = logger.error(&format!("Process wait failed: {}", e));
                     tauri::Error::from(anyhow::anyhow!(msg))
                 })?;
 
                 // Wait for stdout/stderr reading tasks to complete
                 let stdout_logs = stdout_task.await.map_err(|e| {
-                    let msg = log_with_timestamp(&format!("stdout task failed: {}", e), LogLevel::Error);
-                    log_and_emit(&window, &mut logs, msg.clone());
+                    let msg = logger.error(&format!("stdout task failed: {}", e));
                     tauri::Error::from(anyhow::anyhow!(msg))
                 })??;
                 let stderr_logs = stderr_task.await.map_err(|e| {
-                    let msg = log_with_timestamp(&format!("stderr task failed: {}", e), LogLevel::Error);
-                    log_and_emit(&window, &mut logs, msg.clone());
+                    let msg = logger.error(&format!("stderr task failed: {}", e));
                     tauri::Error::from(anyhow::anyhow!(msg))
                 })??;
 
@@ -601,26 +557,23 @@ pub async fn build_project(window: Window, config: BuildConfig) -> Result<BuildR
                     }
                     txt_log_writer.flush().ok();
                 } else {
-                    let msg = log_with_timestamp(
-                        &format!("Failed to create log file '{}'", txt_log_file.display()),
-                        LogLevel::Warning
+                    let msg = logger.warning(
+                        &format!("Failed to create log file '{}'", txt_log_file.display())
                     );
-                    log_and_emit(&window, &mut logs, msg.clone());
                 }
 
                 // Check process status
                 let exit_code = status.code().unwrap_or(-1);
-                let status_msg = log_with_timestamp(
+                let status_msg = logger.log(
                     &format!("Build process exited with code: {}", exit_code),
                     if exit_code == 0 { LogLevel::Info } else { LogLevel::Error }
                 );
-                log_and_emit(&window, &mut logs, status_msg.clone());
 
                 if exit_code != 0 {
                     success = false;
                     return Ok(BuildResult {
                         result: format!("Build failed with exit code: {}", exit_code),
-                        logs,
+                        logs: logger.get_logs().clone(),
                         stages,
                         success
                     });
@@ -635,36 +588,26 @@ pub async fn build_project(window: Window, config: BuildConfig) -> Result<BuildR
                 let build_dir = project_path.join(build_dir_name);
                 let expected_bin_file = build_dir.join(format!("{}.bin", project_name.to_lowercase()));
                 if !build_dir.exists() || !expected_bin_file.exists() {
-                    let msg = log_with_timestamp(&format!("Error: Output file '{}.bin' not found in '{}'", project_name.to_lowercase(), build_dir.display()), LogLevel::Error);
-                    log_and_emit(&window, &mut logs, msg.clone());
+                    let msg = logger.error(&format!("Error: Output file '{}.bin' not found in '{}'", project_name.to_lowercase(), build_dir.display()));
                     success = false;
-                    return Ok(BuildResult { result: msg, logs, stages, success });
+                    return Ok(BuildResult { result: msg, logs: logger.get_logs().clone(), stages, success });
                 }
 
                 // Check file size
                 if let Ok(metadata) = fs::metadata(&expected_bin_file) {
-                    let msg = log_with_timestamp(
-                        &format!("Output file size: {} bytes", metadata.len()),
-                        LogLevel::Info
-                    );
-                    log_and_emit(&window, &mut logs, msg.clone());
+                    let msg = logger.info(&format!("Output file size: {} bytes", metadata.len()));
                 } else {
-                    let msg = log_with_timestamp(
-                        &format!("Failed to get output file metadata: {}", expected_bin_file.display()),
-                        LogLevel::Error
-                    );
-                    log_and_emit(&window, &mut logs, msg.clone());
+                    let msg = logger.error(&format!("Failed to get output file metadata: {}", expected_bin_file.display()));
                     success = false;
-                    return Ok(BuildResult { result: msg, logs, stages, success });
+                    return Ok(BuildResult { result: msg, logs: logger.get_logs().clone(), stages, success });
                 }
 
                 // Rename bin file
                 stages.push(format!("Renaming output file for combination {:?}", combination));
                 if let Err(e) = fs::rename(&expected_bin_file, &bin_dst) {
-                    let msg = log_with_timestamp(&format!("Error moving '{}': {}", expected_bin_file.display(), e), LogLevel::Error);
-                    log_and_emit(&window, &mut logs, msg.clone());
+                    let msg = logger.error(&format!("Error moving '{}' to '{}': {}", expected_bin_file.display(), bin_dst.display(), e));
                     success = false;
-                    return Ok(BuildResult { result: msg, logs, stages, success });
+                    return Ok(BuildResult { result: msg, logs: logger.get_logs().clone(), stages, success });
                 }
 
                 // После завершения:
@@ -677,8 +620,7 @@ pub async fn build_project(window: Window, config: BuildConfig) -> Result<BuildR
                 println!("[CANCEL] Cancel notification received in builder.rs");
                 
                 // Notify frontend before killing process
-                let msg = log_with_timestamp("Build cancellation in progress", LogLevel::Info);
-                log_and_emit(&window, &mut logs, msg);
+                let msg = logger.info("Build cancellation in progress");
                 
                 // Kill the process and tasks
                 let _ = child_ref.kill().await;
@@ -700,8 +642,7 @@ pub async fn build_project(window: Window, config: BuildConfig) -> Result<BuildR
                 }
 
                 // Send events in order with confirmation
-                let msg = log_with_timestamp("Build process cancelled", LogLevel::Info);
-                log_and_emit(&window, &mut logs, msg.clone());
+                let msg = logger.info("Build process cancelled");
                 
                 // Send build-cancelled event and wait for confirmation
                 match window.emit("build-cancelled", true) {
@@ -712,7 +653,7 @@ pub async fn build_project(window: Window, config: BuildConfig) -> Result<BuildR
                 success = false;
                 return Ok(BuildResult { 
                     result: msg,
-                    logs, 
+                    logs: logger.get_logs().clone(), 
                     stages,
                     success 
                 });
@@ -728,33 +669,45 @@ pub async fn build_project(window: Window, config: BuildConfig) -> Result<BuildR
     }
 
     if !any_build_executed {
-        let msg = log_with_timestamp("No build combinations were executed. Check your build settings.", LogLevel::Error);
-        log_and_emit(&window, &mut logs, msg.clone());
-        return Ok(BuildResult { result: msg, logs, stages, success: false });
+        let msg = logger.error("No build combinations were executed. Check your build settings.");
+        return Ok(BuildResult { 
+            result: msg, 
+            logs: logger.get_logs().clone(), 
+            stages, 
+            success: false 
+        });
     }
 
     // Write logs
     stages.push("Writing logs".to_string());
-    if let Err(e) = File::create(&log_file_path).and_then (|mut f| {
-        for log in &logs {
+    if let Err(e) = File::create(&log_file_path).and_then(|mut f| {
+        for log in logger.get_logs() {
             writeln!(f, "{}", log)?;
         }
         Ok(())
     }) {
-        let msg = log_with_timestamp(&format!("Failed to write logs: {}", e), LogLevel::Error);
-        log_and_emit(&window, &mut logs, msg.clone());
+        let msg = logger.error(&format!("Failed to write logs: {}", e));
         success = false;
-        return Ok(BuildResult { result: msg, logs, stages, success });
+        return Ok(BuildResult { 
+            result: msg, 
+            logs: logger.get_logs().clone(), 
+            stages, 
+            success 
+        });
     }
 
     // Finalize build result
     stages.push("Build process completed".to_string());
     let last_result = if success {
-        log_with_timestamp("Build process completed successfully", LogLevel::Info)
+        logger.info("Build process completed successfully")
     } else {
-        log_with_timestamp("Build process completed with errors", LogLevel::Error)
+        logger.error("Build process completed with errors")
     };
-    log_and_emit(&window, &mut logs, last_result.clone());
 
-    Ok(BuildResult { result: last_result, logs, stages, success })
+    Ok(BuildResult { 
+        result: last_result, 
+        logs: logger.get_logs().clone(), 
+        stages, 
+        success 
+    })
 }

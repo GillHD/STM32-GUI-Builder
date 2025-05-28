@@ -6,3 +6,4 @@ pub mod builder;
 pub mod defaults;
 pub mod build_combinations;
 pub mod build_config_gen;
+pub mod logging;
